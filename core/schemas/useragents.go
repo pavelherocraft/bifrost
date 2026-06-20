@@ -62,11 +62,8 @@ func ExtractAndSetUserAgentFromHeaders(headers map[string][]string, bifrostCtx *
 	}
 	if len(userAgent) > 0 {
 		ua := userAgent[0]
-		for _, ids := range integrationUserAgents {
-			if ids.Matches(ua) {
-				bifrostCtx.SetValue(BifrostContextKeyUserAgent, ua)
-				break
-			}
-		}
+		// Always store the User-Agent so it can be forwarded to providers
+		// (some providers like Kimi require specific User-Agent values)
+		bifrostCtx.SetValue(BifrostContextKeyUserAgent, ua)
 	}
 }

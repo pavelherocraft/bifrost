@@ -645,6 +645,11 @@ func SetExtraHeaders(ctx context.Context, req *fasthttp.Request, extraHeaders ma
 				continue
 			}
 		}
+		// User-Agent from extra_headers should always override to allow provider-specific identification
+		if strings.EqualFold(key, "User-Agent") {
+			req.Header.Set(canonicalKey, value)
+			continue
+		}
 		// Only set the header if it doesn't already exist to avoid overwriting important headers
 		if len(req.Header.Peek(canonicalKey)) == 0 {
 			req.Header.Set(canonicalKey, value)
@@ -663,6 +668,12 @@ func SetExtraHeaders(ctx context.Context, req *fasthttp.Request, extraHeaders ma
 					req.Header.Add(k, v)
 				}
 			}
+		}
+	}
+	// Forward User-Agent from the original client request to the provider
+	if userAgent, ok := ctx.Value(schemas.BifrostContextKeyUserAgent).(string); ok && userAgent != "" {
+		if len(req.Header.Peek("User-Agent")) == 0 {
+			req.Header.Set("User-Agent", userAgent)
 		}
 	}
 }
