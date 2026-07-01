@@ -125,6 +125,49 @@ if (m.audio)  inputMods.push("audio");
 Для смены endpoint/credential — только через UI или `/model/update`/`/model/new`
 API.
 
+## GLM-5.2 (res) limits fix (2026-07-01)
+
+**Симптом**: `/setup-opencode/?user=<uuid>` для `GLM-5.2 (res)` генерировал
+`limit: { context: 0, output: 0 }`. Другие `(res)` модели (`GLM-4.7 (res)`,
+`GLM-5.1 (res)`) имели нормальные лимиты.
+
+**Причина**: модель `GLM-5.2 (res)` была добавлена через UI (или
+`POST /model/new`) позже остальных, и `model_info.max_input_tokens` /
+`max_tokens` не были заполнены — это известное поведение `/model/update`,
+которое визуально success но не персистит поля.
+
+**До состояния** в DB:
+```sql
+SELECT model_info FROM "LiteLLM_ProxyModelTable" WHERE model_name = 'GLM-5.2 (res)';
+-- {"id": "ac45db04-...", "db_model": false}  -- без лимитов!
+```
+
+**Fix** — точно как в чеклисте ниже:
+
+```sql
+UPDATE "LiteLLM_ProxyModelTable"
+SET model_info = model_info || jsonb_build_object(
+  'max_input_tokens', 1048576,
+  'max_tokens', 131072
+),
+updated_at = NOW()
+WHERE model_name = 'GLM-5.2 (res)';
+```
+
+Затем:
+1. `docker restart litellm` → ждать `/health/readiness` = 200 (~30s)
+2. `pkill -9 -f "python3 /opt/opencode-setup/api.py"; nohup python3 ... &`
+3. Верификация: `/model/info` показывает `ctx=1048576 out=131072`,
+   `/setup-opencode/api/models?user=<uuid>` (Coders team) содержит
+   `GLM-5.2 (res): { context: 1048576, output: 131072, reasoning: true }`
+
+**Урок**: после добавления ЛЮБОЙ новой (res) модели через UI нужно
+**сразу** проверить `/model/info` и при необходимости сделать SQL UPDATE.
+Готовых "fix it" tooling нет — обнаруживается только когда пользователь
+видит `context: 0` в сгенерированном opencode.json.
+
+---
+
 ## Итого: чеклист для обновления ctx/out/vision/video/audio
 
 1. `docker exec litellm-pg psql ... UPDATE ... jsonb_build_object(...)`

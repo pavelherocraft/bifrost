@@ -4,6 +4,54 @@
 
 ---
 
+### [2026-07-01] — GLM-5.2 (res) missing limits fix
+
+#### Суть
+У `GLM-5.2 (res)` в `LiteLLM_ProxyModelTable.model_info` отсутствовали поля
+`max_input_tokens` и `max_tokens` — в результате `/setup-opencode/?user=<uuid>`
+генерировал `limit: {context: 0, output: 0}` для этой модели.
+
+Это известное ограничение `POST /model/update` — поле визуально "успешно",
+но **не персистится** в DB. Другие `(res)` модели (`GLM-5.1 (res)`,
+`GLM-4.7 (res)`) были заполнены ранее через тот же SQL workflow — а вот
+`GLM-5.2 (res)` была пропущена, т.к. добавлена позже через UI.
+
+#### SQL UPDATE
+
+```sql
+UPDATE "LiteLLM_ProxyModelTable"
+SET model_info = model_info || jsonb_build_object(
+  'max_input_tokens', 1048576,
+  'max_tokens', 131072
+),
+updated_at = NOW()
+WHERE model_name = 'GLM-5.2 (res)';
+```
+
+`jsonb_build_object(...)` мержится с существующими полями — `id`,
+`access_via_team_ids`, `direct_access`, `blocked` остаются нетронутыми.
+
+#### Workflow
+
+1. `docker exec litellm-pg psql ... UPDATE ...` (см. выше)
+2. `docker restart litellm` + ждать `/health/readiness` = 200
+3. `pkill -9 -f "python3 /opt/opencode-setup/api.py"; nohup python3 ... &`
+   (сбросить `_MODEL_INFO` кэш в api.py)
+4. Верификация: `/model/info` + `/setup-opencode/api/models?user=<uuid>`
+
+#### Verification
+
+| Модель | До | После |
+|--------|-----|-------|
+| `GLM-5.2 (res)` в `/model/info` | `ctx=None, out=None` | `ctx=1048576, out=131072` |
+| `GLM-5.2 (res)` в `/setup-opencode/api/models?user=44224bef` (Coders team) | отсутствовала | `context: 1048576, output: 131072, reasoning: true` |
+| `GLM-5.2` (базовая) | `ctx=1048576, out=131072` | (без изменений) |
+
+Hook `user_agent_hook.UserAgentLogger` загружен в callbacks после рестарта LiteLLM
+— merged reasoning chunks для Kimi K2.6/K2.7/MiniMax-M2.7 продолжают работать.
+
+---
+
 ### [2026-07-01] — opencode.json generator: reasoning auto-injection
 
 #### Суть
