@@ -4,6 +4,47 @@
 
 ---
 
+### [2026-07-02] — Remove `GLM-4.7` and `GLM-4.7 (res)` from all teams
+
+#### Суть
+Модели `GLM-4.7` и `GLM-4.7 (res)` отключены (нет в `config.yaml` и нет
+в `LiteLLM_ProxyModelTable` — 0 rows), но их имена оставались в
+`LiteLLM_TeamTable.models` у 8 команд. Любой вызов `/v1/chat/completions`
+с `model: "GLM-4.7"` возвращал `400 Invalid model name passed in
+model=GLM-4.7` — это утечка устаревших имён в UI team'ов и потенциальный
+источник путаницы.
+
+#### Затронутые команды (8)
+- `GLM-4.7` (6 teams): `Agents`, `All Access`, `Analytics`,
+  `CreativeTeam`, `PirateShips`, `SideCoders`
+- `GLM-4.7 (res)` (2 teams): `Coders`, `Porters`
+
+#### SQL
+```sql
+BEGIN;
+UPDATE "LiteLLM_TeamTable"
+SET models = array_remove(models, 'GLM-4.7')
+WHERE 'GLM-4.7' = ANY(models);
+UPDATE "LiteLLM_TeamTable"
+SET models = array_remove(models, 'GLM-4.7 (res)')
+WHERE 'GLM-4.7 (res)' = ANY(models);
+COMMIT;
+```
+Возвращено `UPDATE 6` и `UPDATE 2`. После: 0 команд с этими именами.
+
+#### Verification
+- `GET /team/list` → 9 команд, 0 содержат `GLM-4.7` / `GLM-4.7 (res)`
+- `POST /v1/chat/completions` с `model=GLM-4.7` → HTTP 400
+  "Invalid model name" (был и до удаления, после — то же поведение,
+  но в UI больше не показываются)
+- Regression: `model=GLM-5.1` → HTTP 200 за 2.58s ✓
+
+#### Изменённые файлы
+- `CHANGELOG.md` — эта запись
+- Никаких Go/TS файлов — только DB state.
+
+---
+
 ### [2026-07-02] — gpt-image-2 via opencode agent — `InternalServerError` fix (stream=True to OpenAI image API)
 
 #### Суть
