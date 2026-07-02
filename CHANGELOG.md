@@ -4,6 +4,78 @@
 
 ---
 
+### [2026-07-02] — gpt-image-2 quality=high 504 fix (Timeweb 60s timeout)
+
+#### Суть
+`gpt-image-2 + quality=high` через `https://hcbifrost.herocraft.com/litellm/v1/images/generations`
+возвращал HTTP 504 через 60.27s. Причина: OpenAI upstream генерирует ~120s,
+а Timeweb reverse proxy (89.19.213.124) имеет hardcoded 60s timeout.
+
+Все остальные image models работают нормально:
+`gpt-image-1.5 quality=high` (~28s), `gpt-image-2 quality=medium` (~45s),
+`gemini/gemini-3-pro-image` (~15s), `gemini/gemini-3.1-flash-image` (~7s).
+
+#### Решение (3 файла + 1 hook registration)
+
+1. **`/opt/litellm/config.yaml:119`** — `router_settings.timeout 60 → 300` (5 минут).
+   Backup: `config.yaml.bak.timeout-60`.
+
+2. **`/etc/nginx/sites-available/litellm-bifrost`** — default_server `/` location
+   получил `proxy_read_timeout 600s; proxy_send_timeout 600s;` (раньше
+   использовал default 60s). Backup: `litellm-bifrost.bak.default-server`.
+   Primary server (`/litellm/`) уже имел 600s через `proxy-common.conf`.
+
+3. **`/opt/litellm/image_rate_limit_hook.py`** — добавлен pre-call check
+   `if model == "gpt-image-2" and quality == "high": raise HTTPException(400, ...)`
+   с понятным alternatives list (`gpt-image-1.5 high`, `gemini-3-pro`, `gpt-image-2 medium`).
+   Backup: `image_rate_limit_hook.py.bak.gpt-image2-quality`.
+
+4. **`/opt/litellm/utils_patched.py`** — расширен monkey-patch для регистрации
+   `image_rate_limit_logger` в `litellm.callbacks` (аналогично user_agent_hook).
+   Раньше hook файл был на диске, но не регистрировался при старте (config.yaml
+   не имел `callbacks:` блока, в отличие от user_agent_hook). Backup:
+   `utils_patched.py.bak.register-rate-limit`. **+1036 bytes**.
+
+#### Verification
+
+| Запрос | До | После |
+|--------|-----|-------|
+| `gpt-image-2 quality=high` (external) | 504 за 60.27s | 400 за 0.29s + alternatives |
+| `gpt-image-2 quality=high` (direct 127.0.0.1:4001) | timeout 180s (curl) | 200 за 119s |
+| `gpt-image-2 quality=high` (direct 127.0.0.1:8080) | 504 за 60.03s | 200 за 122s |
+| `gpt-image-2 quality=medium` | 200 за 45s | 200 за 45s (без изменений) |
+| `gpt-image-1.5 quality=high` | 200 за 28s | 200 за 28s (без изменений) |
+| `gemini/gemini-3-pro-image` baseline | 200 за 15s | 200 за 15s (без изменений) |
+| `gemini/gemini-3.1-flash-image` baseline | 200 за 7s | 200 за 7s (без изменений) |
+| chat `MiniMax-M3` (sanity) | 200 OK | 200 OK (без изменений) |
+
+Подтверждено через docker logs: `image_rate_limit_hook: async_pre_call_hook
+CALLED call_type='image_generation' model='gpt-image-2' quality='high'`.
+
+#### Поведение hook
+
+```json
+{
+  "error": "slow_quality_combination_blocked",
+  "message": "gpt-image-2 with quality=high is currently blocked: ...",
+  "model": "gpt-image-2",
+  "quality": "high",
+  "alternatives": [
+    {"model": "gpt-image-1.5", "quality": "high", "approx_latency": "30s", ...},
+    {"model": "gemini/gemini-3-pro-image", "quality": "auto", "approx_latency": "15s", ...},
+    {"model": "gpt-image-2", "quality": "medium", "approx_latency": "46s", ...}
+  ]
+}
+```
+
+Когда можно снять блокировку: либо перестать использовать Timeweb
+(свой reverse proxy / CDN с большим timeout), либо когда OpenAI
+оптимизирует generation для `gpt-image-2 quality=high` до <60s.
+
+Подробный analysis: `.serena/memories/image-models-gpt-image-2-high-fix.md`.
+
+---
+
 ### [2026-07-01] — GLM-5.2 (res) missing limits fix
 
 #### Суть
