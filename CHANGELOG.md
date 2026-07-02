@@ -4,6 +4,79 @@
 
 ---
 
+### [2026-07-02] — gpt-image-2 via opencode agent — `InternalServerError` fix (stream=True to OpenAI image API)
+
+#### Суть
+Subagent `generate-image-gpt` (model: `bifrost-litellm/gpt-image-2`) через
+opencode вызывал ошибку:
+```
+AI_APICallError: litellm.InternalServerError: InternalServerError:
+OpenAIException - The server had an error while processing your request.
+Sorry about that!. Received Model Group=gpt-image-2
+```
+Через ~30s дополнительно: `No deployments available for selected model,
+Try again in 30 seconds. Passed model=gpt-image-2. pre-call-checks=False,
+cooldown_list=['ace47273-2a04-4709-b19c-437d9e948d61']` (LiteLLM положил
+deployment в cooldown 30s).
+
+#### Root cause (НЕ OpenAI!)
+opencode's AI SDK по дефолту шлёт `stream: true` для **каждой** модели
+(видно в `Final returned optional params: {'stream': True, ...}` в
+LiteLLM логе). Но OpenAI image API (`gpt-image-2`, `gpt-image-1.5`) **не
+поддерживает streaming** — это не text-completion endpoint.
+
+LiteLLM делает streaming call → upstream начинает читать socket → OpenAI
+возвращает не-streamable response → LiteLLM зависает → `httpx.ReadTimeout:
+Timeout on reading data from socket` в
+`/app/.venv/lib/python3.13/site-packages/litellm/llms/custom_httpx/aiohttp_transport.py:75`
+→ wrapped как generic "InternalServerError" в "OpenAIException" wording
+→ deployment помечен failed → cooldown 30s.
+
+`api_base` для `gpt-image-2` (deployment `ace47273-2a04-4709-b19c-437d9e948d61`)
+расшифрован через `from litellm.proxy.common_utils.encrypt_decrypt_utils import decrypt_value_helper` —
+это `https://api.openai.com/v1`, прямой OpenAI API. Не кастомный прокси.
+
+#### Решение (1 файл)
+**`/opt/litellm/image_rate_limit_hook.py`** — pre-call hook принудительно
+отключает `stream` для image generation calls:
+
+```python
+# --- 0.25. Force non-streaming upstream call for image generation ---
+if data.get("stream") is True:
+    verbose_proxy_logger.warning(
+        "image_rate_limit_hook: forcing stream=False for image "
+        "generation (was stream=True) - model=%r call_type=%r",
+        data.get("model"),
+        call_type,
+    )
+    data["stream"] = False
+```
+
+LiteLLM сам обёртывает non-streaming response в SSE chunked stream, если
+клиент запрашивал `stream: true`. Клиент получает свой формат,
+upstream работает non-streaming.
+
+Backup: `image_rate_limit_hook.py.bak.stream-fix` (+1040 bytes).
+
+#### Verification
+
+| Запрос | До | После |
+|--------|-----|-------|
+| `gpt-image-2` + `stream:true` (через opencode agent) | InternalServerError → cooldown 30s | 200 OK за 13.17s |
+| `gpt-image-1.5` + `stream:true` | (assumed broken) | works |
+| `gpt-image-2` baseline (no stream) | 200 OK ~12s | 200 OK ~12s (no regression) |
+| `gpt-image-2` + `quality:high` | 400 (slow_quality_combination_blocked) | 400 (still blocked, see prev entry) |
+
+Логи после фикса:
+```
+[01:19:06] image_rate_limit_hook: ENTER call_type='image_generation' model='gpt-image-2' stream=True
+[01:19:06] image_rate_limit_hook: forcing stream=False for image generation (was stream=True) - model='gpt-image-2'
+```
+
+Detailed analysis: `.serena/memories/gpt-image-2-streaming-fix.md`.
+
+---
+
 ### [2026-07-02] — gpt-image-2 quality=high 504 fix (Timeweb 60s timeout)
 
 #### Суть
