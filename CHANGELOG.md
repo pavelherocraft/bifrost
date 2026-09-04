@@ -4,6 +4,81 @@
 
 ---
 
+### [2026-09-04b] — Тест-драйв скиллов opencode (все 4 OK)
+
+Смоук-тест каждого скилла в безопасном режиме (без мутаций):
+
+- **vm-ssh**: askpass + base64-транспорт — коннект, `docker ps`,
+  readiness 200, `opencode-api` active ✅
+- **litellm-diagnose**: аудит спендов 30д (топ: qwen3.7-plus $265.35,
+  kimi-k3 $124.98, GLM-5.3 $77.44); все 6 tencent-upstream'ов
+  (hy3/hy4-preview/deepseek×2/glm×2) со spend>0 за 7д — dual model_cost
+  ключи работают ✅
+- **litellm-cleanup** (dry-run): tmp-ключей 0; в `/tmp` только живой
+  `payload_logs_retention.log`; `admin/` 11 файлов, `\r`-дублей нет ✅
+- **litellm-add-model** (preflight, readonly): 67 моделей, 12 команд,
+  model_cost пары `hy3`/`custom_openai/hy3`, `hy4-preview`/
+  `custom_openai/hy4-preview` на месте с верными ценами ✅
+
+Патч по итогам: `payload_logs_retention.log` (живой crontab-лог ретеншна)
+добавлен в never-delete список cleanup-скилла. Грабля «ssh рвёт
+многострочный вывод» подтвердилась 3/4 вызовов — дробление шагов
+(vm-ssh §3) решает.
+
+---
+
+### [2026-09-04a] — CHANGELOG: санитизация секретов + пуш в публичный форк
+
+Первый пуш форка `pavelherocraft/bifrost` (ветка `hc-main`) после
+накопления незакоммиченных записей: `974fe7a2..a02f2af5`
+(963419db — hygiene, a02f2af5 — CHANGELOG catch-up +3555 строк).
+
+- Санитизировано **12 секретов** → читаемые плейсхолдеры:
+  `<tencent-tokenhub-key>`, `<glm-key-A>`, `<glm-key-B>`, `<salt-key>`,
+  `<master-key-current>`, `<master-key-prev>`, `<master-key-leaked>`,
+  `<ui-password>`, `<sudo-pass>`, `<openai-image-key>`,
+  `<google-ai-studio-key>`
+- **GitHub push protection** поймал 2 секрета, пропущенных ручным
+  сканом по известным паттернам (OpenAI `sk-proj-…` для gpt-image и
+  Google AI Studio `AQ.…` для nanobanana) — пуш отклонён, ключи
+  редактированы, коммит amended (локальный, не пушеный — можно)
+- Полные значения ВСЕХ ключей сохранены в serena memory
+  (`infra/hcbifrost-vm-litellm`, `infra/image-models-image-edit-support`)
+- Урок: перед пушем сканировать и по форматам провайдеров
+  (`sk-proj-`, `AQ\.`, `AIza`, `ghp_`, `xox`, `AKIA`…), не только по
+  своим известным строкам
+- Нюанс: `<sudo-pass>` остаётся в истории старых коммитов (был запущен
+  до санитизации) — из HEAD-дерева убран; переписывание истории не делаем
+
+---
+
+### [2026-09-03b] — Скиллы opencode для LiteLLM-сервера + repo hygiene
+
+Повторяющиеся операции оформлены как project-local скиллы
+`.opencode/skill/<name>/SKILL.md` (формат opencode, gitignored):
+
+- **vm-ssh** — транспорт: askpass, base64-паттерн для всех скриптов,
+  безопасная запись файлов на VM (без `\r`-инцидентов, верификация
+  `repr` listdir), docker logs через LogPath, sudo, psql, рецепты
+- **litellm-add-model** — полный чеклист 11 шагов: preflight upstream,
+  цены OpenRouter, бэкап TeamTable, `/model/new`, гранты командам,
+  **model_cost двумя ключами** (gotcha spend=0), reasoning-флаг,
+  рестарты, smoke+spend, чистка, changelog
+- **litellm-cleanup** — tmp-ключи (`/key/delete` c `key_aliases`),
+  файлы `/tmp` (только dev01-owned), never-delete список
+- **litellm-diagnose** — лестница spend=0, 403 (запятые в публичных
+  именах), UI-логины (`team_id='litellm-dashboard'`), сброс пароля
+
+Секреты в скиллах НЕТ — каждый начинается с «прочитай serena memory
+`infra/hcbifrost-vm-litellm`». Fallback при неподхвате opencode:
+`C:\Users\Admin\.config\opencode\skills\` (глобальная папка).
+
+Repo hygiene (коммит 963419db): `.gitignore` += `.serena/` +
+`.opencode/skill/`; `.serena/` untracked (`git rm -r --cached`) —
+memory-файлы с реальными секретами больше не в репозитории.
+
+---
+
 ### [2026-08-25b] — Whitelist: +91.108.1.0 (третий egress прокси)
 
 После верификации [2026-08-25] пользователем (key/generate из UI — работает)
