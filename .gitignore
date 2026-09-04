@@ -187,3 +187,9 @@ tests/cmd/seedvks/seedvks
 
 # routing harness ledgers (local run journals, never committed)
 tests/e2e/api/routing/ledger-*
+
+# Serena agent memories (private infra notes with real credentials, never commit)
+.serena/
+
+# opencode project-local skills (private infra runbooks for the hcbifrost VM)
+.opencode/skill/
