@@ -4,6 +4,131 @@
 
 ---
 
+### [2026-09-11a] — Kimi Code Platform: новые модели K3-256K + K2.8, K2.6 снята
+
+Подключена Kimi Code Platform (`https://api.kimi.com/coding/v1`) как
+отдельный credential в LiteLLM. Две новые модели, удалена одна устаревшая,
+добавлена поддержка `reasoning_effort` в opencode для всех K3.
+
+#### Credential
+- **`KimiCode`** в `LiteLLM_CredentialsTable`:
+  - `credential_info.custom_llm_provider`: `OPENAI`
+  - `credential_values.api_key`: `<new-kimi-code-key>` (в
+    serena memory `infra/kimi-code-credentials.md`)
+  - `credential_values.api_base`: `https://api.kimi.com/coding/v1`
+- Старый/невалидный ключ (`...VuV5z`) был только в памяти и нигде не
+  использовался — заменён валидным (`...Lrj0`).
+- Бэкапов не было (новый credential, ничего не теряли).
+
+#### Модели
+- **`Kimi K3-256K`** (`model_id=2f25c2b8-...`):
+  - upstream: `k3-256k`; `litellm_params.custom_llm_provider=openai`;
+    credential `KimiCode`; `api_base=https://api.kimi.com/coding/v1`
+  - `model_info`: ctx 262144 / out 32768
+  - поддержка `reasoning_effort ∈ {low, high, max}`
+  - **Команды**: добавлена в `Agents` и `All Access` (по запросу юзера)
+  - upstream реально возвращает reasoning_content с первого chunk'а даже
+    при low-effort, так что merge-first-chunk хук не сработал (не нужен)
+- **`Kimi K2.8`** (`model_id=cc05634d-...`) — upstream `kimi-for-coding`
+  (= Kimi K2.7 Code под новым брендом в Kimi Code Platform):
+  - те же litellm_params как у K3-256K (openai + KimiCode)
+  - `model_info`: ctx 262144 / out 32768
+  - Thinking:ON всегда (effort level не управляется по докам Kimi Code)
+  - **Команды**: добавлена во все 12 команд (Agents, All Access, Analytics,
+    Art, Coders, CreativeTeam, GameDesigners, General, PirateShips,
+    Porters, SideCoders, StarTroopers) — по запросу «добавить всем командам»
+- **`Kimi K2.6`** (`model_id=9a84d2e1-...`) — **снята** по запросу юзера
+  («перестала поддерживаться»):
+  - `POST /model/delete` model_id=`9a84d2e1-9593-456e-897e-e158b75640f2`
+  - убрана из всех 11 команд, где присутствовала (General не имел K2.6)
+  - удалена из `LiteLLM_ProxyModelTable` и из opencode.json
+
+#### `model_cost` (config.yaml `litellm_settings.model_cost`)
+Dual-ключи с `litellm_provider: custom_openai` (gotcha spend=0):
+| ключ                                 | input/token | output/token | источник            |
+|--------------------------------------|-------------|--------------|---------------------|
+| `k3-256k` + `custom_openai/k3-256k`  | `1.5e-6`    | `7.5e-6`     | OpenRouter × 0.5 (per docs K3 quota halved) |
+| `kimi-for-coding` + `custom_openai/kimi-for-coding` | `6.6e-7` | `3.4e-6` | OpenRouter `kimi-k2.7-code` ($0.66/$3.40) |
+| `Kimi K3-256K` + `Kimi K2.8`         | соотв. public names | соотв. | shorthand записи |
+См. skill `litellm-add-model` (п.7 model_cost dual keys — иначе spend=0).
+
+#### `user_agent_hook.py`
+Hook **уже обрабатывает** script-UA → `OPENCODE_UA` (для Kimi Code
+Platform это критично — Kimi Code режет все запросы кроме opencode-UA).
+Ничего нового дописывать не пришлось, только:
+- `_MERGE_FIRST_CHUNK_MODELS += {"Kimi K3-256K", "Kimi K2.8"}` — на
+  всякий случай, для симметрии с K2.6/K2.7/K3 (если upstream вдруг
+  пришлёт role-only первый chunk)
+- `_KIMI_EMPTY_MSG_MODELS += {"Kimi K3-256K", "Kimi K2.8"}` — на
+  случай если Kimi начнёт 400-ить (тот же gotcha как для Moonshot)
+- Бэкап `user_agent_hook.py.bak.kimi-code-<TS>`
+- `_decide_ua()` без изменений — текущая логика script-UA→OPENCODE_UA
+  корректно обрабатывает curl/powershell/python/etc. приходящие к
+  прокси (smoke 200 подтвердил)
+
+#### `api.py` (opencode-setup `_REASONING_CAPABLE`)
+- Добавлены `"Kimi K3-256K"` и `"Kimi K2.8"`. Бэкап
+  `api.py.bak.kimi-code-<TS>`.
+
+#### Restart
+- `docker restart litellm` (для `model_cost` и пере-инжекта hook'а)
+- `systemctl restart opencode-api` (для `_REASONING_CAPABLE`)
+
+#### Smoke (temp-key All Access `tk_kimi_code_20260911`, удалён)
+| # | модель             | param              | код | ответ              | spend |
+|---|--------------------|--------------------|-----|--------------------|-------|
+| 1 | `Kimi K3-256K`     | `reasoning_effort=low` | 200 | `pong` + 30 reasoning tokens | $0.00035250 |
+| 2 | `Kimi K3-256K`     | `reasoning_effort=high`| 200 | reasoning 46 tokens, content=""\*  | $0.00037500 |
+| 3 | `Kimi K3-256K`     | `reasoning_effort=max` | 200 | `pong` + 20 reasoning tokens | $0.00027750 |
+| 4 | `Kimi K2.8`        | без effort         | 200 | `pong` + 13 reasoning | $0.00016272 |
+| 5 | `Kimi K2.8`        | `reasoning_effort=max` | 200 | `Pong` + 12 reasoning (игнорирует, как и ожидалось от kimi-for-coding) | $0.00009860 |
+| 6 | `Kimi K3-256K`     | streaming           | 200 | первый chunk `"P"` в `reasoning_content` | n/a   |
+
+`\* первый chunk streaming вернул reasoning `P`→`ong`→`.` → потом
+`content` `p` → норма; Test 2: первый chunk оказался reasoning-only,
+а content пустой до лимита `max_tokens=50` — поведение Kimi Code при
+medium-effort на короткий prompt.
+
+Spend-инвариант доказан: 6 строк в LiteLLM_SpendLogs, суммарный spend
+~$0.001266; `custom_openai/k3-256k` и `kimi-for-coding` оба попадают
+под свои dual-ключи (нет классического spend=0-эффекта).
+
+#### Cleanup tmp-ключа
+- `POST /key/delete` aliases=`["tmp-kimi-code-20260911"]` → 200; verify
+  count=0 в `LiteLLM_VerificationToken`. Чисто, никаких остатков tmp-* в БД.
+
+#### Команда-current state (post-change)
+| Модель           | команд | примечание                 |
+|------------------|-------|----------------------------|
+| `Kimi K2.7`      | 11    | без изменений              |
+| `Kimi K3`        | 9     | без изменений (по докам там тоже есть reasoning_effort — оставил, см. opencode.json ниже) |
+| `Kimi K3-256K`   | **2** | Agents, All Access (новое) |
+| `Kimi K2.8`      | **12**| все команды (новое)        |
+| `Kimi K2.6`      | **0** | снята                      |
+
+#### opencode.json (global, наш провайдер `bifrost-litellm`)
+- `Kimi K3`: добавлен `options.thinking.allowedEfforts: ["low","high","max"]`
+- `Kimi K3-256K`: новый блок с `allowedEfforts: ["low","high","max"]`,
+  `limit.context=262144, limit.output=32768`, `attachment=false`,
+  `modalities.input=["text"]`
+- `Kimi K2.8`: новый блок с `options.thinking.type="enabled"`, `limit` как
+  у K3-256K, `attachment=false`, `modalities.input=["text"]`
+- `Kimi K2.6` блок удалён (модель больше не существует)
+
+#### Memory
+- `infra/kimi-code-credentials.md` обновлён: старый ключ (`...VuV5z`)
+  помечен как «failed 401», новый (`...Lrj0`) записан.
+- `infra/hcbifrost-vm-litellm.md` — секция не трогалась (лимит по объёму).
+
+#### Backups на VM
+- `/opt/litellm/config.yaml.bak.kimi-code-<TS>`
+- `/opt/litellm/user_agent_hook.py.bak.kimi-code-<TS>`
+- `/opt/opencode-setup/api.py.bak.kimi-code-<TS>`
+- `/tmp/pre_kimi_build_pg.sql` (pg_dump LiteLLM_ProxyModelTable+TeamTable)
+- `/tmp/teams_pre_grants_safe_<TS>.sql` (только TeamTable, pre-grants)
+
+---
+
 ### [2026-09-04b] — Тест-драйв скиллов opencode (все 4 OK)
 
 Смоук-тест каждого скилла в безопасном режиме (без мутаций):
@@ -56,6 +181,9 @@
 
 Повторяющиеся операции оформлены как project-local скиллы
 `.opencode/skill/<name>/SKILL.md` (формат opencode, gitignored):
+*(исправление 2026-09-04: правильный путь `.opencode/skills/` —
+множественное число, см. доку opencode; каталог переименован, скиллы
+подгружаются через нативный `skill` tool после рестарта сессии)*
 
 - **vm-ssh** — транспорт: askpass, base64-паттерн для всех скриптов,
   безопасная запись файлов на VM (без `\r`-инцидентов, верификация

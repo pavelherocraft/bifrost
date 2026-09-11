@@ -193,3 +193,6 @@ tests/e2e/api/routing/ledger-*
 
 # opencode project-local skills (private infra runbooks for the hcbifrost VM)
 .opencode/skill/
+.opencode/skills/
+# project opencode config (allowlists private infra skill names, kept local-only; public repo)
+/opencode.json

@@ -1,1 +1,0 @@
-- feat: initial release of the Bifrost migration CLI
