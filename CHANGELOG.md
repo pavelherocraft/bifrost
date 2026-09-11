@@ -4,6 +4,143 @@
 
 ---
 
+### [2026-09-11c] — Удаление z.ai GLM-5.1/5.2 + reasoning-уровни Low/High/Max для GLM-5.3/Flash
+
+#### Часть 1: z.ai GLM-5.1/5.2 сняты (8 строк)
+
+Удалены ВСЕ z.ai-строки 5.1/5.2 (включая `_dont_use`-тени):
+`GLM-5.1`, `GLM-5.1 (res)`, `GLM-5.1_dont_use`, `GLM-5.1 (res)_dont_use`,
+`GLM-5.2`, `GLM-5.2 (res)`, `GLM-5.2_dont_use`, `GLM-5.2 (res)_dont_use`
+(59 → 51 моделей). Удаление через `POST /model/delete` по model_id.
+
+**Остались нетронутыми**: `atlas_glm-5.1/5.2` + тени (atlascloud),
+`tencent/glm-5-2 (reserved...)`, весь GLM-5.3 family.
+
+**Сопутствующая чистка**:
+- Teams: `array_remove` 8 имён из 10 команд (UPDATE 10)
+- **`LiteLLM_UserTable`**: у юзера pavel `GLM-5.1 (res)` сидел в
+  ПЕРСОНАЛЬНОМ списке моделей — `array_remove` (UPDATE 1). Gotcha:
+  api.py `resolve_models` агрегирует user.models + team.models; чистка
+  только команд не убирает модель из выдачи `/setup-opencode/api/models`.
+- model_cost: удалены 4 осиротевших публичных ключа (`GLM-5.1`,
+  `GLM-5.1 (res)`, `GLM-5.2`, `GLM-5.2 (res)`). `zai-org/glm-5.1/5.2`
+  (upstream atlas-моделей) и `glm-5-2` (tencent) — НЕ тронуты.
+- Credentials: удалены 2 осиротевших (все ссылающиеся модели удалены):
+  `GLM-5.2-credential-f393fafb-...`, `GLM-5.2 (res)-credential-f68780ac-...`
+  (DELETE 2). GLM-5.3 не задеты — у них inline-ключи (cred=None), smoke
+  после удаления: 200 OK.
+- `swap_glm_credentials.py` (bind-mount `/app/`): PAIRS 10 → 6 (вырезаны
+  4 пары 5.1/5.2), QUICK_SWAPS 12 → 4 (вырезаны 8 записей с target 5.1/5.2).
+  `/admin/glm/pairs` → 6 пар. ast.parse OK.
+
+#### Часть 2: reasoning-уровни Low/High/Max для GLM-5.3 family
+
+**Эмпирика (прямые пробы к апстримам, прямоугольная задача, max_tokens=2000)**:
+- Z.AI `GLM-5.3`: baseline rt≈76-112, `reasoning_effort=low` rt≈23-29
+  (в 4 раза меньше), `max`≈baseline. `thinking:{"type":"disabled"}` НЕ
+  даёт нуля (rt≈23-33 ≈ уровень low) — бинарный on/off, granularности нет.
+- Tencent TokenHub `glm-5-3` / `glm-5.3-flash`: та же картина
+  (baseline 76-115, low 21-33, max ≈ baseline).
+- Оба апстрима **honour-ят OpenAI-style `reasoning_effort`** → выбраны
+  variants `reasoningEffort` (3 реальных уровня), а НЕ `thinking.type`.
+
+**Ключевой gotcha: LiteLLM режет `reasoning_effort` для custom_openai**.
+`get_optional_params(custom_llm_provider='custom_openai', reasoning_effort=...)`
+тихо дропает параметр (через прокси эффект пропадает; напрямую к апстриму —
+есть). `custom_openai` не входит в `["openai","azure","text-completion-openai"]
++ openai_compatible_providers`, поэтому extra_body-фоллбэк не применяется.
+Пер-request фикс: тело запроса с `"allowed_openai_params": ["reasoning_effort"]`
+(документировано в самом тексте UnsupportedParamsError; подтверждено e2e).
+
+**user_agent_hook.py**: в `async_pre_call_hook` и
+`async_pre_call_deployment_hook` добавлен блок: если в запросе есть
+`reasoning_effort` — инжектит/дополняет `allowed_openai_params`
+(minimal blast radius: только запросы с effort). После рестарта e2e:
+GLM-5.3 low 23-29 vs baseline 76-108 rt; tencent flash low 22-31 vs 89-90. ✓
+
+**api.py (opencode-setup)**:
+- `_REASONING_CAPABLE` += `GLM-5.3-Flash`, `GLM-5.3-Flash (res)`
+- `_REASONING_VARIANTS` += 6 записей `{low,high,max} → reasoningEffort`:
+  `GLM-5.3`, `GLM-5.3 (res)`, `GLM-5.3-Flash`, `GLM-5.3-Flash (res)`,
+  `tencent/glm-5-3 (reserved...)`, `tencent/glm5-3flash (reserved...)`
+- `/setup-opencode/api/models` отдаёт variants для всех 6; локальный
+  opencode.json не правился (юзер: настройки раздаются сервером)
+- `index.html` не менялся — ветка `m.variants` уже приоритетнее `m.reasoning`
+
+**Restart**: docker restart litellm + systemctl restart opencode-api.
+
+#### Backups
+- `/tmp/glm51-52-cleanup/pre_change_20260911-151119.sql` (pg_dump
+  ProxyModelTable+TeamTable+CredentialsTable)
+- `config.yaml.bak.*`, `api.py.bak.*`, `swap_glm_credentials.py.bak.*`,
+  `user_agent_hook.py.bak.*` — в том же каталоге
+- tmp-ключи и расшифрованные api_key удалены (VerificationToken tmp-%: 0)
+
+---
+
+### [2026-09-11b] — `tencent/glm5-3flash (reserved - use when main is exhausted)`: GLM-5.3-Flash через Tencent TokenPlan
+
+Добавлена резервная Flash-модель на тех же tencent TokenPlan-креденшелах,
+что и остальные tencent GLM. Ключевой gotcha: **формат upstream-имени**.
+
+#### Модель (`model_id=dba3c38c-5bf4-40a0-a5e9-bd7f375e3c7f`)
+- public: `tencent/glm5-3flash (reserved - use when main is exhausted)`
+- upstream: **`glm-5.3-flash`** (точка между `5` и `3`, дефис перед `flash`)
+- `litellm_params`: копия blob от `tencent/glm-5-3 (reserved...)` —
+  api_base `https://tokenhub-intl.tencentcloudmaas.com/plan/v3` (TokenPlan),
+  тот же api_key (inline, encrypted), `custom_llm_provider=custom_openai`,
+  минус `litellm_credential_name`
+- `model_info`: ctx 128000 / out 32000
+
+#### Gotcha: каталог имён tencent TokenHub
+- `GET /v1/models` (tokenhub) отдаёт id **с точками**: `glm-5.3`,
+  `glm-5.3-flash`, `glm-5.2`, `hy3`, `hy4-preview`, `kimi-k3`, …
+- На `/plan/v3` работают ОБА формата для базовых (`glm-5-3` = `glm-5.3`),
+  но для Flash проходят только варианты с точкой: `glm-5.3-flash`.
+  Проверенные 403-варианты («Model … is not supported by TokenPlan»):
+  `glm-5-3-flash`, `GLM-5.3-Flash`, `GLM-5-3-Flash`, `glm5_3_flash`,
+  `tencent/glm-5-3-flash`.
+- `/plan/v3/models` не существует (404) — каталог смотреть только на `/v1/models`.
+- Модель должна быть добавлена на стороне tencent (консоль TokenPlan)
+  ДО первых запросов — иначе тот же 403 при любом написании.
+
+#### `model_cost` (config.yaml, dual-ключи; rates = OpenRouter `z-ai/glm-5.3-flash` $0.075/$0.25 per 1M)
+| ключ                                          | input/token | output/token |
+|-----------------------------------------------|-------------|--------------|
+| `GLM-5.3-Flash` (Z.ai public)                 | `7.5e-08`   | `2.5e-07`    |
+| `glm-5.3-flash` (bare upstream)               | `7.5e-08`   | `2.5e-07`    |
+| `custom_openai/glm-5.3-flash` (новый)         | `7.5e-08`   | `2.5e-07`    |
+| `custom_openai/GLM-5.3-Flash`                 | `7.5e-08`   | `2.5e-07`    |
+| `tencent/glm5-3flash (reserved - ...)` (public)| `7.5e-08`  | `2.5e-07`    |
+- Бэкап `config.yaml.bak.glm53flash-final-<TS>` (перед добавлением
+  `custom_openai/glm-5.3-flash`); yaml валиден после правки.
+
+#### `api.py` (opencode-setup)
+- `_REASONING_CAPABLE` += `"tencent/glm5-3flash (reserved - use when main is exhausted)"`
+  (сделано ранее в сессии, бэкап `api.py.bak.glm53flash-<TS>`).
+- `user_agent_hook.py` — без изменений: tencent GLM не требуют
+  merge-first-chunk / empty-msg патчей (как и `tencent/glm-5-3`).
+
+#### Команды
+- Зеркально `tencent/glm-5-3`: **11 команд** (Art, Porters, General,
+  StarTroopers, CreativeTeam, Analytics, SideCoders, GameDesigners,
+  PirateShips, All Access, Coders). Agents — нет (как у glm-5-3).
+
+#### Smoke (tmp-ключи All Access, все удалены)
+| тест | код | результат |
+|------|-----|-----------|
+| non-stream «pong» | 200 | `content=pong` + 33 reasoning tokens |
+| non-stream «2+2» | 200 | reasoning-only до length-лимита (норма) |
+| streaming «say hi» | 200 | 31 SSE chunk |
+| spend | — | 3 строки `glm-5.3-flash` в SpendLogs, тариф точно $0.075/$0.25 (напр. $1.035e-5 за 18in/36out) |
+
+#### Cleanup
+- 13 tmp-ключей `tmp-*` удалены из `LiteLLM_VerificationToken` (count=0).
+- Расшифрованный api_key (/tmp/tck) и служебные файлы удалены (host + container).
+- Бэкап pre-build: `/tmp/backup_before_tencent_glm53flash_20260911-140355.sql`.
+
+---
+
 ### [2026-09-11a] — Kimi Code Platform: новые модели K3-256K + K2.8, K2.6 снята
 
 Подключена Kimi Code Platform (`https://api.kimi.com/coding/v1`) как
