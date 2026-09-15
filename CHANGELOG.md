@@ -4,6 +4,202 @@
 
 ---
 
+### [2026-09-15] — пароль pavel: инцидент и сброс + кастомный аудит мутаций + hook-trace выключен
+
+**Инцидент — логин pavel@herocraft.com перестал работать**: 4 попытки 08:04–08:07
+→ 401 «Invalid credentials». Диагностика: `verify_password` (scrypt, stdlib)
+исправен (probe ok/wrong; другие юзеры логинятся 200), username находится
+(ошибка из ветки «юзер найден, пароль не подошёл»), хэш в БД —
+современный `scrypt:` и **не менялся** (массовый UPDATE юзеров в 08:09 —
+фоновая spend-джоба, у всех строк один timestamp). Когда хэш разошёлся с
+паролем — неизвестно: **AuditLog пуст (0 строк, аудит не был включён)**,
+старые логи контейнера затёрты 12.09 при чистке диска. Восстановление:
+сброс через `hash_password()` из `litellm.proxy.utils` (та же функция,
+что верифицирует) → UPDATE → `POST /litellm/v2/login` → 200 ✓ (пароль в
+этом файле не публикуется; хранится в serena memory). Бэкап старого хэша:
+`LiteLLM_UserTable_bak_pwd_20260915`.
+
+**Аудит мутаций**: нативный `store_audit_logs: true` на community-образе
+**молча не работает** — `create_audit_log_for_update()` возвращает nil при
+`premium_user is not True` (enterprise-only; callback-диспетч тоже за
+этим гейтом). Сделан свой аудит на уровне БД:
+- таблица `audit_custom` (ts, table_name, action, object_id,
+  changed_columns, payload-диф old→new)
+- функция `audit_row_change()` + триггеры AFTER INSERT/UPDATE/DELETE на
+  `LiteLLM_UserTable`, `LiteLLM_VerificationToken`, `LiteLLM_TeamTable`,
+  `LiteLLM_ProxyModelTable`
+- churn-колонки биллинга (`spend`, `last_active`, `updated_at`,
+  `budget_reset_at`, `expires`, `tpm/rpm/max_parallel`) не пишутся —
+  иначе фоновые spend-джобы заспамили бы таблицу (проверено живым тестом)
+- ловит и прямые SQL-правки мимо API; ограничение: триггер не знает
+  «кто» (приложение ходит в PG одним юзером)
+- флаг `store_audit_logs: true` оставлен в config.yaml — заработает сам
+  при появлении лицензии
+- e2e: INSERT/DELETE ключей через API ловятся; каждый UI-логин создаёт
+  session-ключ → виден в аудите
+
+**Ретеншн**: root-cron `15 3 * * * /opt/litellm/admin/audit_retention.sh`
+— DELETE из `audit_custom` и `LiteLLM_AuditLog` старше 90 дней (прогон
+вручную OK). Кавычки в crontab ломаются — скрипт вынесен в файл
+(владелец root, chmod +x).
+
+**hook-trace выключен полностью** (итог инцидента 12.09): дефолт
+`HOOK_TRACE` в `user_agent_hook.py` `"1"`→`"0"` + второй источник записи
+`stream-start` (прямой `open(...,"a")` мимо гейта) обёрнут в
+`if _trace_enabled`. После рестарта — 0 байт за 50 c живого трафика.
+Бэкап: `user_agent_hook.py.bak.tracedisable`. Вернуть трейс: env
+`HOOK_TRACE=1`. Cron-трункейт остаётся страховкой от `*-json.log`.
+
+---
+
+### [2026-09-12] — пересчёт spend за 30 дней (кэш-ставки задним числом) + инцидент с диском
+
+**Пересчёт SpendLogs** (следствие `[2026-09-11e]`): история биллинговалась
+без cache-ставок (кэш-хиты = $0). Точный построчный пересчёт невозможен
+(`response` jsonb пуст, `cached_tokens` не хранился), поэтому неявный
+cache-ratio выведен из самой истории: `r = (full_price − logged) /
+(prompt × in_rate)`, кламп [0..1]; оценка = `logged + prompt_est × r ×
+new_cache_rate` (эквивалентно `logged + cached_est × cache_rate`).
+
+**Итог за 30 дней** (топ): qwen3.7-plus $425.87→$455.61 (r=0.27),
+kimi-k3 $197.03→$562.57 (r=0.99), GLM-5.3 $165.37→$772.65 (r=0.97),
+qwen3.8-max $85.09→$273.64, MiniMax-M3 $41.40→$279.35, glm-5.3-flash
+$10.48→$59.36. Всего: **$1,148.38 → $2,685** (полный прайс без кэша был
+бы $13,638 — провайдерский кэш съедает ~91%).
+
+**Применение**: транзакционный UPDATE по 38 моделям,
+`spend *= factor`, строки помечены `metadata.cache_recalc="2026-09-12"`
+(**127,422 строки**). Итог в DB $2,784.47 = est $2,684.62 + не-кэш
+$98.75 ✓. Роллбэк: таблица `LiteLLM_SpendLogs_bak_cachefix_20260912`
+(request_id, model, spend_original, startTime — 127,422 строки,
+$1,048.82).
+
+**Попутный фикс**: у model_cost ключа `glm-5.3-flash` отсутствовали
+`input/output_cost_per_token` (затёрты вчерашней текстовой вставкой
+`custom_openai/glm-5.3-flash` сразу после заголовка блока) —
+восстановлены ($0.075/$0.25 + cache $0.03). Аудит остальных 101 записи —
+чисто.
+
+**Инцидент — диск 98%**: CREATE TABLE бэкапа упал «No space left».
+Виновники: `/tmp/hook-trace.log` в контейнере litellm — **7.4 GB**
+(HOOK_TRACE дефолтно ON, лог растёт бесконечно) и контейнерный
+`*-json.log` (>1 GB). Трункейт оба, место 865M → 28G. Защита: root-cron
+каждые 6 ч — truncate hook-trace.log + json.log >2G. (15.09 хук-трейс
+отключён полностью — см. `[2026-09-15]`.)
+
+---
+
+### [2026-09-11e] — cache-тарифы для 91 model_cost записей (источник: OpenRouter)
+
+**Контекст**: расследование «парадокса 11.09» — qwen3.7-plus (97M токенов)
+списал $31.80, а GLM-5.3 (157M токенов) только $13.91. Причина: z.ai
+репортит ~96% входа как `cached_tokens`, а в наших model_cost записях нет
+`cache_read_input_token_cost` → litellm трактует как **$0** (кэш-хиты
+бесплатны). Qwen биллится по полному прайсу. Проверено
+`cost_per_token(model='GLM-5.3', cached=150M)` → $13.60 до фикса.
+
+**Фикс**: во все model_cost записи config.yaml добавлены
+`cache_read_input_token_cost` (+ `cache_creation_input_token_cost` где OR
+даёт) — ставки из свежего дампа OpenRouter (`input_cache_read` /
+`input_cache_write`, per-token):
+- **91/102 записей** пропатчено (85 основным скриптом + 6 qwen3.8-max
+  отдельным проходом — OR переименовал `qwen/qwen3.8-max` →
+  `qwen/qwen3.8-max-0902`)
+- Маппинг: `OVERRIDES` из `build_model_cost.py` + ручной EXTRA для 17
+  ключей (K3-256K/K2.8 public names, custom_openai/*, tencent upstream
+  `glm-5-3`/`glm-5-2`, hy3/hy4-preview, deepseek bare, tencent flash public)
+- `Kimi K3-256K` (3 ключа) — cache_read = половина kimi-k3 (зеркало
+  halved list-прайса)
+- **Скипнуты 11**: gpt-image-2.5×2 (image-модели, кэша нет),
+  qwen3.5-plus×3 + kimi-k2-0905 + gpt-3.5-turbo×2 (у OR нет cache-ставок),
+  doubao×3 (MANUAL-прайс, bytedance не на OR)
+- Примеры ставок: GLM-5.3 $0.26/M, GLM-5.3-Flash $0.03/M, glm-5-3 (tencent)
+  $0.26/M, qwen3.7-plus $0.064/M (write $0.4/M), kimi-k3 $0.205/M,
+  qwen3.8-max $0.25/M (write $2.5/M), hy3 $0.0206/M
+
+**Верификация**:
+- `cost_per_token` GLM-5.3: cached=0 → $223.60, cached=150M → $52.60
+  (=150M×$0.26 + 6.4M×$1.40 + 1.05M×$4.40) ✓
+- Живой e2e (3 вызова GLM-5.3, контекст 4K): call1 cached=0 → $0.005640
+  (полный прайс); call2/3 cached=3968 → $0.001116 = 51×$1.40+3968×$0.26+
+  3×$4.40 — сходится до знака в SpendLogs ✓
+- yaml валиден, дубликатов top-level ключей нет, `docker restart litellm` OK
+
+**Doubao (допатчено следом)**: OpenRouter не даёт cache-ставки (в
+`bytedance-seed/seed-2-1-turbo` поля None), но litellm built-in
+`deepinfra/ByteDance/Seed-2.0-*` подтверждает конвенцию Volcano:
+**cache = 20% input** (5e-7→1e-7, 1e-7→2e-8). Применено:
+pro (in $0.85/M) → `1.7e-07`, turbo (in $0.30/M) → `6e-08`, все 3 ключа.
+Итог: **94/102** записей с cache_read.
+
+**Gotcha YAML (PyYAML 1.1)**: научная нотация без точки в мантиссе
+(`3e-08`, `6e-08`, `8e-08`) парсится как **СТРОКА**, не float — все
+122 cache-строки нормализованы к формату с точкой (`3.0e-08`); в
+model_cost теперь 0 string-значений.
+
+Бэкап: `config.yaml.bak.cache-rates-<TS>`. Эффект: учёт spend теперь
+отражает реальную экономию кэша, а не бесплатность; GLM-дни перестанут
+«исчезать» из money-статистики относительно токенов.
+
+---
+
+### [2026-09-11d] — GPT-Image-2.5 Sunburst + Flare
+
+Подключены новые OpenAI image-модели (анонс GPT-Image-2.5):
+`gpt-image-2.5-sunburst` (precision/editing) и `gpt-image-2.5-flare`
+(fast, 50% быстрее gpt-image-2).
+
+#### Модели (POST /model/new, plain values — персистит model_info)
+- sunburst `model_id=16b8d231-a275-4730-a9d4-9f6c51e99725`
+- flare `model_id=28915ac8-f36b-4298-ae1c-ae744712fffe`
+- `litellm_params`: upstream = публичное имя, `custom_llm_provider=openai`,
+  inline api_key (тот же OpenAI ключ, что у gpt-image-1.5/2),
+  defaults `size=1024x1024`, `quality=low`
+- `model_info`: mode=image_generation, ctx 1048576 / out 131072,
+  supports_vision=true (зеркало gpt-image-2)
+- api_key переиспользован расшифровкой из строки gpt-image-2
+  (decrypt_value_helper в контейнере)
+
+#### Спеки (docs: developers.openai.com/api/docs/guides/image-generation)
+- Sizes: 1024x1024 / 1536x1024 / 1024x1536 + custom (кратно 16, AR 1:3..3:1,
+  max edge 3840, 0.65–8.3 Mpx); >2560x1440 — experimental
+- Quality: `low/medium/high/xhigh/max/auto` (auto = дефолт; xhigh/max —
+  новые уровни, которых нет у gpt-image-2)
+- Streaming partial images (`stream:true`, `partial_images`)
+- Обе поддерживают `/v1/images/edits` (в т.ч. multi-image reference + mask)
+
+#### model_cost (config.yaml, mirror gpt-image-2 — тарифы идентичны)
+`input_cost_per_token=5e-06`, `cache_read_input_token_cost=1.25e-06`,
+`input_cost_per_image_token=8e-06`, `output_cost_per_image_token=3e-05`,
+`mode=image_generation`. NB: tarифы 2.5 = тарифам gpt-image-2 по докам
+($5/M text-in, $8/M image-in, $30/M image-out); low ≈ 196 out-токенов ≈ $0.0059.
+
+#### Команды
+Зеркально `gpt-image-2` — 8 команд: Art, CreativeTeam, All Access,
+StarTroopers, Coders, GameDesigners, Porters, PirateShips.
+
+#### api.py
+`_IMAGE_EDIT_CAPABLE` += обе модели. Рестарты: litellm + opencode-api.
+
+#### Smoke (tmp-key All Access, удалён)
+| тест | код | время |
+|------|-----|-------|
+| flare generation (low, 1024x1024) | 200 | 13s, b64 868KB |
+| sunburst generation (low) | 200 | 11s, b64 864KB |
+| flare edit (recolor) | 200 | 11s, b64 1.3MB |
+| sunburst edit (recolor) | 200 | 11s, b64 1.3MB |
+
+Spend: generation 196 out-токенов → $0.005955 (сходится с доками $0.00588
++ инпут); edit $0.0103–0.0142 (больше image-инпут токенов). ✓
+
+#### Примечания
+- Timeweb 60s: качество выше medium может превышать 60s через Timeweb
+  (как gpt-image-2+high → 504). Hook блокирует только `gpt-image-2+high`;
+  для 2.5-моделей с `xhigh`/`max` блокировки НЕ ставили — если появятся
+  504, добавить правило в `image_rate_limit_hook.py`.
+
+---
+
 ### [2026-09-11c] — Удаление z.ai GLM-5.1/5.2 + reasoning-уровни Low/High/Max для GLM-5.3/Flash
 
 #### Часть 1: z.ai GLM-5.1/5.2 сняты (8 строк)
@@ -91,6 +287,11 @@ GLM-5.3 low 23-29 vs baseline 76-108 rt; tencent flash low 22-31 vs 89-90. ✓
   тот же api_key (inline, encrypted), `custom_llm_provider=custom_openai`,
   минус `litellm_credential_name`
 - `model_info`: ctx 128000 / out 32000
+- **Лимиты исправлены (same-day fix)**: изначально ставил 128000/32000
+  «на глаз» — неправильно. Boundary probe: `max_tokens=131072` → 200,
+  `131073` → 400 (cap 131072, как у всей GLM-5.3 семьи). SQL UPDATE:
+  `model_info` ctx 1048576 / out 131072 + `litellm_params.max_tokens` 131072
+  (клэмп, зеркало z.ai Flash-строк). Двойной рестарт.
 
 #### Gotcha: каталог имён tencent TokenHub
 - `GET /v1/models` (tokenhub) отдаёт id **с точками**: `glm-5.3`,
