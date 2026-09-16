@@ -4,6 +4,47 @@
 
 ---
 
+### [2026-09-16] — tencent/DeepSeek-V4.1-Flash (Tencent TokenPlan, multimodal) + GLM-5.3 (res) для General
+
+**Новая модель `tencent/DeepSeek-V4.1-Flash`** (`model_id=309e64bb-cea6-4181-b47a-8574aeff316a`):
+- upstream **`deepseek/deepseek-flash`** — слэш-формат, НЕ как у старых
+  deepseek (`deepseek-v4-flash-0731`). Название продукта в консоли
+  tencent — «DeepSeek-V4.1-Flash», а API-id — `deepseek/deepseek-flash`
+  (пользователь дал точное имя из консоли; 15 вариантов id в свипе дали
+  ноль, т.к. 403002 «ключ не авторизован» одинаков для несуществующих и
+  не включённых имён — по нему существование не определить)
+- base `https://tokenhub-intl.tencentcloudmaas.com/plan/v3`, custom_openai,
+  inline ключ (как у других tencent deepseek)
+- **Спеки (probe)**: ctx 1 048 576; max output **393 216** (384K — boundary
+  probe: 393216→200, 393217→400); **supports_vision=true** (реальная
+  картинка 64×64 PNG → «Red»; первая проба с 1×1 битым PNG дала
+  «unsupported image» — не верить таким ошибкам, чинить картинку);
+  reasoning гибридный (reasoning_content появляется по решению модели)
+- **Цены** (OpenRouter `deepseek/deepseek-v4.1-flash`): in $0.15/M,
+  out $0.60/M, **cache_read $0.003/M** (KV-компрессия — кэш почти
+  бесплатный, 2% от input)
+- **Команды: 11, все кроме General** (по запросу). General взамен получил
+  `GLM-5.3 (res)` (array_append, проверено temp-ключом: видит, smoke 200)
+
+**КРИТИЧЕСКИЙ gotcha биллинга (повторение glm-5.3-flash)**: custom_openai
+пишет SpendLogs под **upstream** именем (`deepseek/deepseek-flash`), не
+под публичным алиасом → model_cost должен содержать ОБА ключа. Добавлены
+`tencent/DeepSeek-V4.1-Flash` + `deepseek/deepseek-flash` (по $0.15/$0.60,
+cache 3e-09; YAML-нотация с `.0`: `6.0e-07`). Верификация: spend
+$2.595e-5 = 33×1.5e-7 + 35×6e-7 (до знака) ✓. Исторический ноль от
+первого смоука исправлен ручным UPDATE.
+
+**Gotcha грантов**: проверка `'{name}' = ANY(models)` вернула пусто
+(тихо), а `models @> ARRAY['name']` работает корректно — использовать
+`@>`.
+
+Активация на стороне tencent заняла время: модель появилась в консоли,
+но ключ получил доступ только после активации пользователем в TokenPlan
+консоли (каталог `/v1/models` — глобальный, 59 моделей, пер-ключевой
+entitlement в нём не виден).
+
+---
+
 ### [2026-09-15] — пароль pavel: инцидент и сброс + кастомный аудит мутаций + hook-trace выключен
 
 **Инцидент — логин pavel@herocraft.com перестал работать**: 4 попытки 08:04–08:07
