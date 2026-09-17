@@ -196,3 +196,10 @@ tests/e2e/api/routing/ledger-*
 .opencode/skills/
 # project opencode config (allowlists private infra skill names, kept local-only; public repo)
 /opencode.json
+
+# local-only harness: VM transport, snapshots, backups (private infra)
+.opencode/bin/
+.opencode/vm-snapshots/
+
+# vm SSH transport helper (root, local-only)
+/vmssh.ps1

@@ -4,6 +4,73 @@
 
 ---
 
+### [2026-09-17] — OR-полные цены всем моделям; Kimi K2.8 temperature; harness: бэкапы/мониторинг/ТГ/снапшоты
+
+**model_cost = полные OR-цены (без скидок) для ВСЕХ моделей** (договор:
+OR-тариф — внутренний референс, независимо от провайдера):
+- Источник скидок найден: OR endpoints API `pricing.discount` (доля), полная
+  цена = `price/(1−discount)`; консенсус = mode по провайдерам
+- Обновлено 44 записи: deepseek v4-pro/flash/0731/0813 (скидки 34–87%!),
+  glm-5.1/5.2/5.3-flash (50%+), gpt-5.6-sol/5.5, tencent DeepSeek-V4.1-Flash
+  (0.15→0.30/0.60→1.20), hy3, mimo, MiniMax, weblate/cx/sex кастомы
+- `qwen3.8-max` на OR = слаг `qwen/qwen3.8-max-0902` (наши 2.00/6.00/0.25
+  уже совпадали с полными)
+- Без OR-листинга оставлены: doubao-seed-2.1, kimi-k2.7/2.8/k3-256k,
+  kimi-for-coding, qwen3.5-plus, старые claude, gpt-image (тариф за картинку)
+- Скрипт-рефреш: `/opt/litellm/admin/or_full_prices.py [--apply]` (dry-run
+  дефолт, бэкап automatic). Бэкапы: `config.yaml.bak.orfull{,2}-20260917`
+
+**Kimi K2.8: фикс temperature-400**. Upstream отвергает любой temperature
+кроме фиксированного («only 1 is allowed»). В `user_agent_hook.py`
+(async_pre_call_hook) добавлен дроп temperature для моделей с `k2.8` в имени.
+Верифицировано temp-ключом: 0.3→200, 0.6→200 (было 400). Бэкап
+`.bak.k28temp-20260917`.
+
+**413-диагноз (инцидент компакций)**: воспроизведён порог 1MiB на Timeweb
+edge (89.19.213.124, TLS-терминатор) — ladder-probe с локальной машины:
+1000KB проходит, >1MiB → nginx-413-HTML. Наш nginx ни при чём (лимиты
+50m/100M, в логах пусто). Фикс = client_max_body_size на Timeweb (вне нашего
+контроля). Найдено попутно: curl.exe на Windows падает CRYPT_E_NO_REVOCATION
+→ `CURL_SSL_NO_REVOKE=1` (поставлена в user-env).
+
+**Harness (по итогам ревизии)**:
+- Локальный транспорт `.opencode/bin/vmssh.ps1` (`-File/-Command/-Get`) —
+  base64 через stdin, устойчив к BOM/CRLF (PS prepend'ит UTF-8 BOM в пайпы!);
+  ssh alias `hcbifrost` в `~/.ssh/config`
+- VM cron (root): `backup_nightly.sh` 2:45 (конфиги+4 таблицы →
+  /opt/backups/litellm/, 80KB/ночь, ротация 14д); `healthcheck.sh` */5
+  (liveness/edge/диск/контейнеры → healthcheck.log + ALERT + TG);
+  `weekly_tg_snapshot.sh` Сб 4:00 (бандл → ТГ-группа); `monthly_fulldump.sh`
+  1-го 3:00 (полный pg_dump, хранить 2)
+- `/opt/litellm/tg.env` (root-600): TG_BOT_TOKEN/TG_CHAT_ID — **заполнены и
+  проверены 2026-09-17**: бот @litellm_health_hc_bot → группа «HC AI HUB»
+  (`-5283012258`); e2e-тест: sendMessage + sendDocument + ручной прогон
+  weekly_tg_snapshot.sh (`sent OK`). Нюанс: бот не видит обычные сообщения
+  группы (privacy mode) — это ОК, ему нужно только отправлять
+- **SpendLogs retention 180 дней**: `spendlogs_retention.sh` cron 3:30
+  (DELETE + VACUUM; архив — в месячных полных дампах; Daily-агрегаты не
+  трогаются). Данные сейчас с 2026-06-20, старше 180д — 0 (первое удаление
+  ~17.12). Стационарный потолок таблицы ≈ 8-9GB
+- vmssh.ps1: живёт в корне репо (`/vmssh.ps1`, gitignored). Файл трижды
+  пропадал из `.opencode/bin` (проект), `.config/opencode` (юзер) и корня —
+  причина не выяснена (не джанитор); при пропаже — пересоздать и проверить
+  `-Command "echo alive"`
+- Локально: `sync-vm-snapshots.ps1` (Сб 9:00 — конфиги/скрипты/бэкапы →
+  `.opencode/vm-snapshots/`, gitignored, config.yaml санитизирован — ключей
+  в нём нет, model_list пуст), `pull-fulldump.ps1` (1-го 9:00 — полный дамп
+  на машину, хранить 3), установщик тасков `setup-tasks.cmd` (запустить один
+  раз под админом — schtasks из песочницы агента блокируется)
+- Канон ссылок `.opencode/references/links.md` + serena `infra/links`;
+  гигиена памяток: 9 слито/удалено → `infra/history-2026H1` (Timeweb-факты,
+  credentials-готы, image-готы сохранены конденсировано)
+
+**Расширение litellm-add-model** (235 строк): OR-полные цены §3, гранты `@>`,
+dual/triple-key, reasoning-варианты, пробы (boundary/vision-PNG без PIL),
+gotchas 9–13 (TokenPlan имена, двойной рестарт, фиксированный temperature,
+Daily-таблицы кэша).
+
+---
+
 ### [2026-09-16] — tencent/DeepSeek-V4.1-Flash (Tencent TokenPlan, multimodal) + GLM-5.3 (res) для General
 
 **Новая модель `tencent/DeepSeek-V4.1-Flash`** (`model_id=309e64bb-cea6-4181-b47a-8574aeff316a`):
@@ -42,6 +109,13 @@ $2.595e-5 = 33×1.5e-7 + 35×6e-7 (до знака) ✓. Исторически�
 но ключ получил доступ только после активации пользователем в TokenPlan
 консоли (каталог `/v1/models` — глобальный, 59 моделей, пер-ключевой
 entitlement в нём не виден).
+
+**Reasoning-уровни V4.1-Flash**: `reasoning_effort` хонорится tencent
+(прямыми пробами: на сложной задаче max = 1.5–1.8× reasoning-токенов от
+baseline стабильно, low срезает; градиент слабее GLM, но однозначный).
+Добавлены variants low/high/max в opencode-setup (`_REASONING_CAPABLE` +
+`_REASONING_VARIANTS`), e2e через LiteLLM — 200 (hook allowlist
+универсальный, отдельного патча не потребовалось).
 
 ---
 

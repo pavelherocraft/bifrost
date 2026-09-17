@@ -928,3 +928,27 @@ cd ui && npm run build
 * Follow **strict folder structure and routing conventions**
 * Use **the right tool for the right problem**
 * Keep code **simple, predictable, and maintainable**
+
+---
+
+## Fork Ops: hcbifrost LiteLLM (HARD RULE — skill-first)
+
+This fork doubles as the ops workspace for the hcbifrost LiteLLM VM. For any
+task touching that infrastructure, **load the matching skill via the `skill`
+tool BEFORE doing anything else** — the checklists encode incident-learned
+gotchas that are easy to miss:
+
+| Request matches | Load skill first |
+|---|---|
+| Add/connect/enable a model or provider on LiteLLM («добавь модель», "add model") | `litellm-add-model` |
+| Something on the LiteLLM server misbehaves (spend=0, 403, logins, password reset) | `litellm-diagnose` |
+| Clean up temp keys/files after LiteLLM work («почисти», "cleanup") | `litellm-cleanup` |
+| Any other server/VM task (logs, restarts, DB queries, «на сервере») | `vm-ssh` |
+
+Also mandatory for these tasks:
+- Read serena memory `infra/hcbifrost-vm-litellm` (secrets, team IDs) and
+  `infra/links` → canonical reference file `.opencode/references/links.md`
+- Billing prices are ALWAYS full (undiscounted) OpenRouter reference prices
+  regardless of real provider — see links.md §1
+- After model/config changes: restart BOTH `litellm` container AND
+  `opencode-api` service (double-restart rule)
