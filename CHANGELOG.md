@@ -4,6 +4,51 @@
 
 ---
 
+### [2026-09-19] — qwen3.8-max «No deployments available»: Cloudflare-UA + disable_cooldowns
+
+**Инцидент**: оба деплоя группы qwen3.8-max в cooldown → клиенты ловили 429
+«No deployments available / Try again in 372833 seconds» (103 часа!).
+Диагноз (прямыми зондами апстримов с расшифрованными ключами):
+- **atlas/qwen3.8-max**: Cloudflare перед Atlas отдаёт **403 error 1010**
+  клиентам без User-Agent (паттерн как у moonshot). Фикс: PATCH
+  `litellm_params.headers.User-Agent` → hot reload → 200
+- **qwen3.8-max (aliyun TokenPlan)**: 429 с далёкими reset-заголовками →
+  LiteLLM выставляет cooldown на длительность окна СБРОСА КВОТЫ, игнорируя
+  свой cooldown_time=30. Интермиттент-флапы TokenPlan (503 upstream)
+  подтверждены; модель в каталоге плана — `qwen3.8-max` БЕЗ префикса
+  (каталог: 14 моделей, qwen3.8-max/flash/3.7-max/3.7-plus/3.6-flash)
+- **Попутный self-inflicted**: PATCH `model` на имя без префикса
+  (`qwen3.8-max` вместо `openai/qwen3.8-max`) сломал загрузку деплоя в
+  роутер («Invalid model name») — **префикс `openai/` обязателен как
+  маркер провайдера**, апстрим получает имя УЖЕ без префикса (litellm
+  стрипает сам). Откачено.
+
+**Фиксы**: PATCH headers UA на оба деплоя + рестарт litellm (холодный
+роутер). Верифицировано temp-ключами: `qwen3.8-max` → «OK» (алиюн),
+`atlas/qwen3.8-max` → 200 (Atlas). Temp-ключи удалены.
+
+**Cooldown-механика и финальное решение (`disable_cooldowns: true`)**:
+первичная идея «revive через no-op PATCH» — **нерабочая**: cooldown хранится
+в памяти роутера с ключом model_id (UUID стабилен при PATCH), hot-reload
+пересоздаёт объект, но запись кулдауна переживает (bare qwen3.8-max ожил
+только после рестарта; в patch_model cooldown не упоминается вовсе).
+Причина 103ч подтверждена кодом (router.py:7470: «cooldown time: deployment
+config > **response header** > router default» — reset-заголовок провайдера
+перебивает наш cooldown_time=30). Решение: **`router_settings.disable_cooldowns:
+true`** (router.py:311/537), бэкап `config.yaml.bak.nocooldown-20260919`.
+Компромисс: при реальной смерти провайдера запросы долбят его без
+кулдаун-паузы — принято, т.к. квоты часто сбрасываются вручную и
+многодневные блокировки недопустимы. revive_model.sh удалён как неработающий.
+
+**Gotchas**: `?model=` игнорируется `/model/info` (валидный фильтр —
+`?litellm_model_id=<uuid>`; без него возвращается ВЕСЬ список); VK в БД —
+хэш (`sk-`+хэш не автентифицируется, реальный ключ не восстанавливается);
+`docker restart` из -File скриптов с sudo -S иногда молча не срабатывает —
+проверять StartedAt. Транспорт: канон `vm-ssh-helper.ps1` в корне репо
+(файлы `vmssh.ps1` продолжают таинственно исчезать, хелпер-имя выживает).
+
+---
+
 ### [2026-09-17] — OR-полные цены всем моделям; Kimi K2.8 temperature; harness: бэкапы/мониторинг/ТГ/снапшоты
 
 **model_cost = полные OR-цены (без скидок) для ВСЕХ моделей** (договор:
@@ -68,6 +113,13 @@ edge (89.19.213.124, TLS-терминатор) — ladder-probe с локаль�
 dual/triple-key, reasoning-варианты, пробы (boundary/vision-PNG без PIL),
 gotchas 9–13 (TokenPlan имена, двойной рестарт, фиксированный temperature,
 Daily-таблицы кэша).
+
+**aliyun/qwen3.8-flash: контекст 262144 → 1 000 000** (PATCH model_info;
+официальные спеки Alibaba: context 1 000 000, max input 991 808 (thinking
+983 616), max output 131 072 — output был верен). opencode-api рестартнут,
+`/model/info` и `/models` отдают 1000000/131072 — пользователям
+перегенерировать opencode.json со страницы Setup (в старых копиях зашит
+лимит 256K, триггерящий компакцию слишком рано).
 
 ---
 

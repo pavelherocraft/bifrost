@@ -203,3 +203,6 @@ tests/e2e/api/routing/ledger-*
 
 # vm SSH transport helper (root, local-only)
 /vmssh.ps1
+
+# vm SSH transport (canonical name, local-only)
+/vm-ssh-helper.ps1

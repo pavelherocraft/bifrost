@@ -940,7 +940,7 @@ gotchas that are easy to miss:
 
 | Request matches | Load skill first |
 |---|---|
-| Add/connect/enable a model or provider on LiteLLM («добавь модель», "add model") | `litellm-add-model` |
+| Add/modify a model or provider on LiteLLM — new models, limits, prices, model_info patches, grants («добавь модель», «поправь модель», "add/patch model") | `litellm-add-model` |
 | Something on the LiteLLM server misbehaves (spend=0, 403, logins, password reset) | `litellm-diagnose` |
 | Clean up temp keys/files after LiteLLM work («почисти», "cleanup") | `litellm-cleanup` |
 | Any other server/VM task (logs, restarts, DB queries, «на сервере») | `vm-ssh` |
