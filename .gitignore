@@ -191,15 +191,18 @@ tests/e2e/api/routing/ledger-*
 # Serena agent memories (private infra notes with real credentials, never commit)
 .serena/
 
-# opencode project-local skills (private infra runbooks for the hcbifrost VM)
-.opencode/skill/
-.opencode/skills/
-# project opencode config (allowlists private infra skill names, kept local-only; public repo)
-/opencode.json
-
-# local-only harness: VM transport, snapshots, backups (private infra)
+# opencode: skills + references ARE committed (private repo). Everything else in .opencode/ is local-only.
+!.opencode/skills/
+!.opencode/references/
 .opencode/bin/
 .opencode/vm-snapshots/
+.opencode/plans/
+.opencode/node_modules/
+.opencode/package.json
+.opencode/hostname*
+.opencode/bun.lock
+# project opencode config (allowlists private infra skill names, kept local-only)
+/opencode.json
 
 # vm SSH transport helper (root, local-only)
 /vmssh.ps1
