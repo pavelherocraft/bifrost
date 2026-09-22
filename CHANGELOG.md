@@ -4,6 +4,99 @@
 
 ---
 
+### [2026-09-22] — Xiaomi MiMo-V2.6 (pro/flash) + StepFun (Step 5 Preview, 3.5 Flash 2603, 3.7 Flash)
+
+**Xiaomi** (зеркало mimo-v2.5: тот же token-plan-sgp эндпоинт/ключ, каталог
+уже содержал v2.6):
+- `xiaomi/mimo-v2.6-pro` (d801e112) + `xiaomi/mimo-v2.6-flash` (45de32fd)
+- ctx 1 048 576 / out 131 072; **омнимодальные**: vision+video+audio=true
+- цены OR-полные: pro 0.435/0.87/0.0036read, flash 0.14/0.28/0.0028read
+  (скидка 0% — full = list)
+- гранты: **все 12 команд**
+
+**StepFun** (новый провайдер: custom_openai,
+`https://api.stepfun.ai/step_plan/v1`, inline ключ):
+- `stepfun/step-5-preview` (87f0b6ae): ctx 1 000 000 / out **65 536**,
+  vision+video, reasoning (effort low/medium/high — офиц. доки); цены
+  вендора 1.00/2.70 (на OR отсутствует); гранты: **все 12 команд**
+- `stepfun/step-3.5-flash-2603` (340bc9b1): ctx 262 144 / out 65 536,
+  text-only, reasoning; 0.10/0.30; гранты: **All Access + Agents**
+  (юзер просил «-260» — в каталоге `step-3.5-flash-2603`, «260»=260K-контекст)
+- `stepfun/step-3.7-flash` (4d283fc3): ctx 262 144 / out 230 400,
+  vision+video, reasoning; 0.20/1.15/0.04read (скидка 20%); гранты:
+  **All Access + Agents**
+- model_cost: публичные + upstream имена ×10 (upstream = голые id:
+  mimo-v2.6-*, step-5-preview, step-3.5-flash-2603, step-3.7-flash)
+
+**api.py**: `_REASONING_CAPABLE`/`_REASONING_VARIANTS` += все 5 имён
+(reasoning_effort пробой подтверждён у всех). Рестарты с контролем
+ExecMainStartTimestamp. Верификация: 5×200 plain+effort; /models:
+ Agents-ключ (team-only) видит stepfun-тройку с полными настройками;
+SideCoders-юзер видит mimo×2 + step-5-preview (3.5/3.7 корректно скрыты).
+
+**Готчи**: у tencent/aliyun/xiaomi token-plan эндпоинтов /models может
+отсутствовать (tencent 404) — имена только свипом; у xiaomi/stepfun — есть.
+`?user=` в api.py резолвит по membership юзера, а team-scoped КЛЮЧ — по
+своей команде: юзер с ключом Agents, состоящий в Coders, увидит разное в
+`?user=` vs `?vkh=` — для проверки ключа использовать `?vkh=<token>`.
+
+---
+
+**Миграция `DeepSeek-V4.1-Flash` на OpenRouter** (новое публичное имя
+`openrouter/deepseek-v4.1-flash`, id `8f4f993c-4abb-45a0-92c8-c260d40f8f5d`):
+- провайдер **openrouter** (нативный), model `openrouter/deepseek/deepseek-v4.1-flash`,
+  api_base https://openrouter.ai/api/v1, ключ inline (лимит $10/день)
+- **headers обязательны для Activity**: `HTTP-Referer: litellm` + `X-Title: litellm`
+- model_info: ctx **1 048 576** / out **384 000** (OR max_completion; у tencent
+  было 393 216), **vision=true** (text+image→text), reasoning гибридный
+- model_cost: ключ **`openrouter/deepseek/deepseek-v4.1-flash`** — SpendLogs
+  для openrouter-провайдера логгирует модель **С префиксом провайдера**
+  (не голый слаг!) — 0.30/1.20, read 0.01/M (полные OR). Верифицировано
+  до цента (residual = cache-read по 1e-8)
+- гранты: 11 команд (мигрированы с tencent-версии)
+
+**Отключение tencent-версии**: `blocked=true` (309e64bb) + имя удалено из
+массивов всех 11 команд. Попутно выяснено: план-ключ tencent УЖЕ потерял
+доступ к `deepseek/deepseek-flash` (403002) — миграция назрела.
+
+**tencent Kimi K3 (fallback)** — активирована юзером в консоли:
+- upstream-id **`kimi-k3`** (голое имя; свип подтвердил — 403002 у всех
+  остальных вариантов), custom_openai, plan/v3, plan-ключ
+- имя: `tencent/Kimi K3 (reserved - use when main is exhausted)`
+  (id `49d081ab-0183-4539-982f-0dfeaabfc3e9`)
+- лимиты: boundary-проба — 200 вплоть до max_tokens 1 048 576 (зеркало
+  main Kimi K3); **reasoningEffort поддерживается** (low/high/max 200)
+- model_cost: `tencent/Kimi K3 (reserved…)` + `kimi-k3` — зеркало main
+  Kimi K3 (3.00/15.00/0.30 за 1M)
+- гранты: 9 команд main `Kimi K3`
+
+**api.py**: `_REASONING_CAPABLE` + `_REASONING_VARIANTS` += оба новых имени;
+рестарты litellm + opencode-api. Верификация: оба имени 200 (plain и
+reasoning_effort), старое tencent-имя для юзеров отсутствует.
+**Готча-подтверждение**: рестарт opencode-api в пакетном скрипте молча не
+выполнился (стрим оборвался до строки) — юзеры видели нулевые лимиты и
+reasoning:false. Диагностика: `systemctl show <svc> -p
+ExecMainStartTimestamp` — сверять время старта процесса, `is-active`
+недостаточно. После явного рестарта: оба имени отдают ctx/out,
+reasoning=true + variants low/high/max.
+
+**SideCoders: GLM (res) → обычные + перенос andrew.petrov (21.09)**:
+- у SideCoders убраны `GLM-5.3 (res)` / `GLM-5.3-Flash (res)`, добавлены
+  обычные `GLM-5.3` / `GLM-5.3-Flash` (tencent-glm резервы остаются
+  выключенными)
+- andrew.petrov@herocraft.com (bd7c1b70) перенесён Coders → SideCoders
+  (member_add + member_delete)
+- **КРИТИЧЕСКАЯ ГОТЧА**: `/team/member_delete` **каскадно удаляет
+  team-scoped ключи** юзера — ключ «Petrov Andrey» (spend $8.83) был
+  удалён автоматически. Восстановлен целиком из `audit_custom`
+  (jsonb_populate_record по payload.old, spend-история сохранена) с
+  team_id → SideCoders. Мораль: перед member_delete — выгружать командные
+  ключи юзера; кастомный аудит oкупился сполна
+- верификация: `/models?vkh=<token>` юзера → resolution team-only,
+  15 моделей SideCoders, GLM-5.3/GLM-5.3-Flash обычные (ctx 1M, reasoning)
+
+---
+
 ### [2026-09-19] — qwen3.8-max «No deployments available»: Cloudflare-UA + disable_cooldowns
 
 **Инцидент**: оба деплоя группы qwen3.8-max в cooldown → клиенты ловили 429
