@@ -4,6 +4,72 @@
 
 ---
 
+### [2026-09-24] — router_settings.fallbacks: цепочки GLM-5.3 / GLM-5.3-Flash → (res) → tencent-reserve
+
+**Контекст**: разбор отказоустойчивости после инцидентов с длинными
+кулдаунами — при исчерпании плана провайдер шлёт `Retry-After` (до 3 дней),
+деплоймент ложится на весь срок, докупленные лимиты не помогают; именно
+поэтому стоит `disable_cooldowns: true`. Заодно найдены механизмы на
+будущее: per-deployment `litellm_params.cooldown_time` перебивает
+`Retry-After` (кап на кулдаун без глобального отключения) и order-based
+failover внутри одной model group (`litellm_params.order`).
+
+**Изменение** (`config.yaml`, блок `router_settings.fallbacks`):
+- `GLM-5.3` → `GLM-5.3 (res)` → `tencent/glm-5-3 (reserved - use when main is exhausted)`
+- `GLM-5.3 (res)` → `GLM-5.3` → `tencent/glm-5-3 (reserved - use when main is exhausted)`
+- `GLM-5.3-Flash` → `GLM-5.3-Flash (res)` → `tencent/glm5-3flash (reserved - use when main is exhausted)`
+- `GLM-5.3-Flash (res)` → `GLM-5.3-Flash` → `tencent/glm5-3flash (reserved - use when main is exhausted)`
+
+Фолбек exception-based: срабатывает после `num_retries: 2` внутри группы,
+к кулдаунам не привязан — работает и при `disable_cooldowns: true`.
+Глубина цепочек ограничена `max_fallbacks` (default `ROUTER_MAX_FALLBACKS=5`),
+зацикливания при обоюдных правилах нет. Имена моделей — символ в символ
+как в `LiteLLM_ProxyModelTable` (включая суффикс `(reserved - ...)`).
+
+**Применение**: бэкап `config.yaml.bak.fallbacks-20260924`, патч через
+`sudo python3` (anchor `disable_cooldowns: true`), `docker restart litellm`.
+
+**Верификация**: yaml валиден, `/health/readiness` → 200 (~35s), тестовый
+inference на `GLM-5.3` → 200 (временный ключ создан и удалён). Реальный
+failover на проде не прогонялся — сработает при первой ошибке основного
+деплоймента.
+
+---
+
+### [2026-09-23] — GLM-5.3 500 «unexpected keyword argument 'reasoning'»: конвертация в reasoning_effort
+
+**Инцидент**: 3480 ошибок за сутки (с 14:05Z 22.09), GLM-5.3 (290) +
+GLM-5.3-Flash (162) failures. Затронуты 5 юзеров (Petrov Andrey/SideCoders —
+355, Yakubenko/Porters, Denbrov/GameDesigners, Dudarev+Korkin/PirateShips) —
+все обновили opencode.json после добавления новых моделей и начали
+использовать thinking-варианты GLM.
+
+**Причина**: opencode при включённом reasoningEffort шлёт в chat/completions
+параметр **`reasoning`** (объект в стиле Responses API) — не
+`reasoning_effort`. LiteLLM для custom_openai-провайдеров пропускает
+неизвестные параметры насквозь; OpenAI SDK `AsyncCompletions.create()`
+не принимает `reasoning` → TypeError → 500. Модель-агностично: любой
+custom_openai-деплой упал бы так же.
+
+**Фикс** (`user_agent_hook.py`, блок после k2.8-temperature): в
+`async_pre_call_hook` — если запрос содержит `reasoning`: словарь с `effort`
+→ `data['reasoning_effort'] = effort` (функциональность thinking
+сохраняется), затем ключ `reasoning` удаляется. Бэкап
+`.bak.reasoningfix-20260923`, рестарт litellm (StartedAt 23:21Z).
+
+**Верификация**: эмуляция opencode-запроса `reasoning={"effort":"low"}`
+на GLM-5.3 → **200 «OK»** (раньше 500); лог подтверждает конвертацию
+(`converted reasoning -> reasoning_effort for model=GLM-5.3`); обычный
+вызов 200; temp-ключ удалён.
+
+**Попутно в failures-топе замечены** (не блокеры, отдельные истории):
+`vendor-a/model`/`vendor-b/model` (463) — A/B-трафик Weblate-джаджа с
+фейковыми именами моделей (ожидаемо 400); atlas/qwen3.8-max (378) —
+вчерашний префиксный инцидент, уже закрыт; пустое имя модели (642) —
+требует отдельного разбора при случае.
+
+---
+
 ### [2026-09-22] — Xiaomi MiMo-V2.6 (pro/flash) + StepFun (Step 5 Preview, 3.5 Flash 2603, 3.7 Flash)
 
 **Xiaomi** (зеркало mimo-v2.5: тот же token-plan-sgp эндпоинт/ключ, каталог

@@ -1,0 +1,12 @@
+sk-litellm-x9LANSKFkfTXLMNwxsudOXy84bXOzKKqBeCoGJAdBxeMqin
+ UI-пароль admin / V8MZeNC3ZicWqRF2hTSB
+
+host:    162.55.137.149
+port:    1995
+user:    dev01
+пароль:  7Cr4iW9l8P   (он же — sudo)
+
+Быстрое подключение:
+ssh -p 1995 dev01@162.55.137.149        # пароль выше
+
+На этой машине уже настроен алиас в ~/.ssh/config (Host hcbifrost) — так что можно просто ssh hcbifrost.
