@@ -4,6 +4,24 @@
 
 ---
 
+### [2026-09-24] — fallback Kimi K3 → tencent-резерв
+
+**Изменение** (`config.yaml`, `router_settings.fallbacks`, тем же блоком
+что и GLM-цепочки ниже):
+- `Kimi K3` → `tencent/Kimi K3 (reserved - use when main is exhausted)`
+
+Резервный tencent-деплоймент K3 был активирован ещё 22.09, но жил
+отдельной модельной группой — подхватывался только вручную. Теперь при
+фейле основного K3 (после `num_retries: 2`) роутер сам уходит в резерв.
+
+**Применение**: бэкап `config.yaml.bak.fallbacks-k3-20260924`, патч через
+`sudo python3`, `docker restart litellm`.
+
+**Верификация**: yaml валиден, `/health/readiness` → 200 (~40s),
+тестовый inference на `Kimi K3` → 200 (временный ключ создан и удалён).
+
+---
+
 ### [2026-09-24] — router_settings.fallbacks: цепочки GLM-5.3 / GLM-5.3-Flash → (res) → tencent-reserve
 
 **Контекст**: разбор отказоустойчивости после инцидентов с длинными
