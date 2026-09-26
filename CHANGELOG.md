@@ -92,6 +92,41 @@ failover на проде не прогонялся — сработает при
 
 ---
 
+### [2026-09-27] — MiniMax Media API: passthrough-роуты (TTS/voice clone/video/image)
+
+**Подключена не-текстовая линейка MiniMax Token Plan** (ключ из credential
+«Minimax», api.minimax.io) через `general_settings.pass_through_endpoints`
+(litellm 1.90.1, VK-авторизация на роутах, без ключа — 401):
+
+| роут (через /litellm) | target | модели |
+|---|---|---|
+| `/minimax/v1/t2a_v2` (POST) | api.minimax.io/v1/t2a_v2 | **speech-2.8-hd** (turbo не подключаем по решению юзера; технически достижим — passthrough не фильтрует body) |
+| `/minimax/v1/voice_clone` (POST) | … | клонирование по voice_id+сэмплу |
+| `/minimax/v1/image_generation` (POST) | … | **image-01** (t2i/i2i subject_reference) |
+| `/minimax/v2/video_generation` (POST) | api.minimax.io/**v2**/video_generation (v2-корень, content-based!) | **MiniMax-H3, MiniMax-H3-Max** |
+| `/minimax/v2/query/video_generation` (GET) | … | статус video-задач |
+
+- **Music API закрыт** для аккаунта: 410 «no longer available to new users»
+  (классификация по API-типу, текстовый стаж аккаунта не влияет)
+- **H3-видео живёт на /v2** (v1-эндпоинт отвечает «this model must use the
+  /v2 endpoint»); query — GET
+- **КРИТИЧЕСКАЯ ГОТЧА (self-inflicted)**: ключ в конфиг был обрезан — при
+  копировании из расшифровки печатался срез `[:80]`, полный ключ 125 символов.
+  Симптом: MiniMax «login fail: carry the API secret key» при живом ключе —
+  httpbin-эхо показало корректный заголовок, но усечённый. Мораль: ключи
+  передавать только длину-проверенным путём (assert len), не глазами из логов
+- Верификация: все 5 роутов 200 (валидационные пайлоады) + **полный e2e
+  speech-2.8-hd: base_resp 0 success, 40KB MP3 за 1.1с** через прокси
+  (voice_id `female-shaonv`; системные голоса — platform.minimax.io/docs/faq/
+  system-voice-id; аудио в ответе — hex-строка)
+- **Setup-страница**: блок «MiniMax Media API» (nginx alias отдаёт
+  /opt/opencode-setup/index.html напрямую — правка живая без рестартов) —
+  таблица моделей/роутов + curl-пример; бэкап `.bak.minimax-media-20260927`
+- Spend-трекинг passthrough ≈ 0 (расходы — в консоли MiniMax); доступ —
+  любой валидный VK (осознанно)
+
+---
+
 ### [2026-09-26] — xiaomi TTS/ASR: «routing не настроен» = неверный протокол вызова
 
 **Диагноз** (voice/xiaomi/mimo-v2.5-tts-{voiceclone,voicedesign} → HTTP 400/500):
