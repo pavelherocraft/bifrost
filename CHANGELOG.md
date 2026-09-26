@@ -4,6 +4,44 @@
 
 ---
 
+### [2026-09-25] — аудио-модели Xiaomi MiMo-V2.5: voice/xiaomi/* (ASR + 3×TTS)
+
+**Изменение**: добавлены 4 деплоймента через `/model/new` (Token Plan
+endpoint, существующие креды):
+- `voice/xiaomi/mimo-v2.5-asr` — распознавание речи, `supports_audio_input`,
+  цена `input_cost_per_second` ≈ $0.074/час (30M credits/час в Token Plan)
+- `voice/xiaomi/mimo-v2.5-tts` — синтез, встроенные голоса, цена 0
+- `voice/xiaomi/mimo-v2.5-tts-voiceclone` — клон по аудио-сэмплу, цена 0
+- `voice/xiaomi/mimo-v2.5-tts-voicedesign` — голос по текстовому описанию, цена 0
+
+TTS в Token Plan бесплатны (не едят кредиты). Все четыре — через
+`chat.completions` с параметром `audio`, не классические `/audio/*`
+эндпоинты. Текст для озвучки — в `assistant`-сообщении; сэмпл для
+voiceclone — data-URI (`data:audio/wav;base64,...`) в `audio.voice`;
+для voicedesign обязателен `user`-месседж с описанием голоса.
+
+**Доступ**: всем командам кроме Analytics (11 команд, team `models`).
+
+**Фикс TTS 500**: Xiaomi возвращает `message.audio` с `expires_at: null`
+и `transcript: null`, а pydantic-модель LiteLLM требует `int`/`str` →
+`ValidationError` в `convert_dict_to_response.py`. Патч
+`/opt/litellm/admin/patch_xiaomi_audio.py` — нормализует только поля
+`message.audio` (id/data не трогает); идемпотентен, бэкап
+`convert_dict_to_response.py.bak.xiaomi-audio` в контейнере,
+зарегистрирован в `litellm_entrypoint.sh` (бэкап
+`.bak.xiaomi-audio-20260925`) — переживает рестарт и recreate.
+
+**Применение**: `docker restart litellm`; `opencode-api.service`
+перезапущен для инвалидации кеша `_MODEL_INFO` (флаги `audio`).
+
+**Верификация**: `/health/readiness` → 200; asr → текст + usage
+(`seconds: 2`); tts → WAV 84KB; voiceclone → WAV 107KB; voicedesign →
+WAV 115KB; `/model/info` — все 4; opencode `/models?vk=` — юзер Coders
+видит 4 voice/* с корректными audio-флагами, юзер Analytics — ни одной.
+Временные ключи удалены.
+
+---
+
 ### [2026-09-24] — fallback Kimi K3 → tencent-резерв
 
 **Изменение** (`config.yaml`, `router_settings.fallbacks`, тем же блоком
