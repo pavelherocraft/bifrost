@@ -92,6 +92,45 @@ failover на проде не прогонялся — сработает при
 
 ---
 
+### [2026-09-26] — xiaomi TTS/ASR: «routing не настроен» = неверный протокол вызова
+
+**Диагноз** (voice/xiaomi/mimo-v2.5-tts-{voiceclone,voicedesign} → HTTP 400/500):
+TTS у xiaomi — это **НЕ OpenAI `/v1/audio/speech`**, а **chat completions с
+audio-выходом** (доки mimo.mi.com/static/docs/api/audio/tts.md): endpoint
+`/v1/chat/completions`, **assistant-сообщение = текст для синтеза**,
+user-сообщение = описание голоса (только voicedesign), `audio: {voice,
+format}`; ответ — `message.audio.data` (base64 WAV/MP3). Попутно: попытка
+пропустить через litellm /audio/speech дала «LLM Provider NOT provided»
+(speech-роутинг требует префикс провайдера в model-строке) → после префикса
+`openai/` — 404 openresty (нет /audio/speech на token-plan базе). Префиксы
+откачены — деплои с голыми upstream-именами + custom_openai корректны для
+chat-протокола.
+
+**Протокол по моделям** (все через `POST /litellm/v1/chat/completions`):
+- `voice/xiaomi/mimo-v2.5-tts`: `messages=[{assistant: "<текст>"}]`,
+  `audio.voice` опционален (встроенные: mimo_default, 冰糖, 茉莉, 苏打,
+  白桦, Mia, Chloe, Milo, Dean) — **проверено: 200, WAV 215KB**
+- `voice/xiaomi/mimo-v2.5-tts-voicedesign`: `messages=[{user: "<описание
+  голоса>"},{assistant: "<текст>"}]`, поле voice НЕ поддерживается;
+  `audio.optimize_text_preview` — автополировка текста — **проверено: 200,
+  WAV 164KB**
+- `voice/xiaomi/mimo-v2.5-tts-voiceclone`: `audio.voice` ОБЯЗАТЕЛЕН = **data-URI
+  семпла**: `data:audio/wav;base64,<BASE64>` (или `data:audio/mpeg;base64,`
+  для mp3) — ГОЛЫЙ base64 без префикса даёт «Param Incorrect»; семпл ≤10MB
+  base64, mp3/wav, человеческая речь. Формат сообщений: `[user:"" (опц.),
+  assistant:"<текст>"]`. **Проверено на реальном семпле (24kHz/16bit/mono/
+  4.2с): 200 за ~7с, 606KB WAV на выходе**; результат сохранён локально для
+  прослушки. Стриминг — режим совместимости (одним куском после инференса)
+- Секрет стилей: user-сообщение = натуральная инструкция стиля (эмоции, темп,
+  «режиссёрский режим»), теги вида `(вздох)`/`(поёт)` — в assistant-тексте;
+  у mimo-v2.5-tts есть режим пения тегом `(唱歌)`
+- `voice/xiaomi/mimo-v2.5-asr` (speech-to-text): проверять отдельно —
+  presumably тоже chat-совместимый формат с audio-входом
+
+Стриминг поддержан (`stream: true` → delta.audio чанками, формат pcm).
+
+---
+
 ### [2026-09-23] — GLM-5.3 500 «unexpected keyword argument 'reasoning'»: конвертация в reasoning_effort
 
 **Инцидент**: 3480 ошибок за сутки (с 14:05Z 22.09), GLM-5.3 (290) +
