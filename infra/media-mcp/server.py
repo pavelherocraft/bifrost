@@ -9,8 +9,8 @@ and per-key/team model permissions apply).
 Generated media is written to FILES_DIR and served publicly by nginx under
 https://hcbifrost.herocraft.com/media-files/ (TTL 24h via cron cleanup).
 
-Tools: list_media_models, generate_image, generate_video, video_status,
-       synthesize_speech, clone_speech, transcribe_audio
+Tools: list_media_models, generate_image, edit_image, generate_video,
+       video_status, synthesize_speech, clone_speech, transcribe_audio
 Extra route: POST /upload (Bearer VK required) -> files/uploads/.
 """
 
@@ -48,6 +48,15 @@ IMAGE_MODELS = {
     "gpt-image-2.5-sunburst": "OpenAI image gen variant",
     "gpt-image-2.5-flare": "OpenAI image gen variant",
     "minimax/image-01": "MiniMax t2i (aspect_ratio via size)",
+}
+IMAGE_EDIT_MODELS = {
+    "gemini/gemini-3.1-flash-image": "fast edit (default)",
+    "gemini/gemini-3-pro-image": "higher quality edit",
+    "gpt-image-1.5": "OpenAI image edits",
+    "gpt-image-2": "OpenAI image edits",
+    "gpt-image-2.5-sunburst": "OpenAI image edits variant",
+    "gpt-image-2.5-flare": "OpenAI image edits variant",
+    "minimax/image-01": "MiniMax i2i via subject_reference (character/style)",
 }
 VIDEO_MODELS = {
     "MiniMax-Hailuo-2.3": "newest, best quality (default)",
@@ -155,6 +164,7 @@ def list_media_models() -> dict:
     synthesize_speech / clone_speech -> transcribe_audio(<url>)."""
     return {
         "image_models": IMAGE_MODELS,
+        "image_edit_models": IMAGE_EDIT_MODELS,
         "video_models": VIDEO_MODELS,
         "tts_models": TTS_MODELS,
         "voice_clone_model": "voice/xiaomi/mimo-v2.5-tts-voiceclone",
@@ -169,6 +179,7 @@ def list_media_models() -> dict:
             "input audio for clone/ASR: http(s) URL | data-URI | base64 | 'upload:<name>'",
             "to upload a local file the user must POST it to https://hcbifrost.herocraft.com/media-upload?name=<file> with Bearer <their LiteLLM key> — response gives url and ref ('upload:<name>')",
             "video is async: generate_video -> task_id -> poll video_status until Success",
+            "edit_image modifies an existing image (i2i); its output URL can feed generate_video.first_frame_url too",
             "style param = natural-language voice/tone instruction (emotion, pace, accent); audio tags like (laughs)/(sighs) go inside the text",
             "voiceclone sample: wav/mp3, <=10MB, clean speech a few seconds long",
             "voicedesign: voice comes purely from `style` description; voice param not supported",
@@ -207,6 +218,60 @@ async def generate_image(
     if size:
         body["size"] = size
     r = await _llm(vk, "POST", "/v1/images/generations", timeout=180, json=body)
+    item = (r.json().get("data") or [{}])[0]
+    if item.get("b64_json"):
+        img = base64.b64decode(item["b64_json"])
+    elif item.get("url"):
+        async with httpx.AsyncClient(timeout=60) as c:
+            img = (await c.get(item["url"])).content
+    else:
+        raise ValueError("no image data in response")
+    return {"url": _save(img, _ext_for(img)), "model": model, "bytes": len(img)}
+
+
+@mcp.tool()
+async def edit_image(
+    ctx: Context,
+    prompt: Annotated[str, Field(description="What to change in the image (e.g. 'replace background with sunset', 'make it watercolor style')")],
+    image: Annotated[str, Field(description="Source image: http(s) URL (e.g. from generate_image) | data-URI | 'upload:<name>' | base64. png/jpg")],
+    model: Annotated[str, Field(description="Edit-capable model — see list_media_models().image_edit_models")] = "gemini/gemini-3.1-flash-image",
+    size: Annotated[Optional[str], Field(description="Optional output size 'WxH' for openai models")] = None,
+) -> dict:
+    """Edit an existing image (image-to-image / inpainting by instruction).
+    Returns {url} — hosted public URL (TTL 24h); usable as
+    generate_video.first_frame_url."""
+    vk = _vk(ctx)
+    async with httpx.AsyncClient(timeout=120) as c:
+        raw = await _resolve_source(image, c)
+    mime = _mime_for(raw)
+    if mime not in ("image/png", "image/jpeg"):
+        raise ValueError(f"image must be png/jpg, got {mime}")
+
+    if model == "minimax/image-01":
+        body = {"model": "image-01", "prompt": prompt,
+                "subject_reference": [{"type": "character",
+                                       "image_file": f"data:{mime};base64,{base64.b64encode(raw).decode()}"}]}
+        if size:
+            body["aspect_ratio"] = size
+        r = await _llm(vk, "POST", "/minimax/v1/image_generation", timeout=180, json=body)
+        d = r.json()
+        if (d.get("base_resp") or {}).get("status_code", 0) != 0:
+            raise ValueError(f"minimax: {(d.get('base_resp') or {}).get('status_msg')}")
+        urls = (d.get("data") or {}).get("image_urls") or d.get("image_urls") or []
+        if urls:
+            async with httpx.AsyncClient(timeout=60) as c:
+                img = (await c.get(urls[0])).content
+        else:
+            b64 = (d.get("data") or {}).get("image_base64") or d.get("image_base64")
+            img = base64.b64decode(b64)
+        return {"url": _save(img, _ext_for(img)), "model": model, "bytes": len(img)}
+
+    data = {"model": model, "prompt": prompt}
+    if size:
+        data["size"] = size
+    files = {"image": (f"source{_ext_for(raw)}", raw, mime)}
+    r = await _llm(vk, "POST", "/v1/images/edits", timeout=300,
+                   data=data, files=files)
     item = (r.json().get("data") or [{}])[0]
     if item.get("b64_json"):
         img = base64.b64decode(item["b64_json"])

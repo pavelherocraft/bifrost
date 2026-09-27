@@ -4,6 +4,26 @@
 
 ---
 
+### [2026-09-28] — MCP `media`: тул `edit_image` (image-to-image)
+
+Новый тул в `media-mcp` — редактирование картинки по текстовой
+инструкции. Вход `image` через общий resolver (URL | data-URI |
+`upload:<name>` | base64, png/jpg). Модели (`image_edit_models` в
+`list_media_models`): 6 edit-capable LiteLLM-моделей (gemini
+flash/pro-image, gpt-image-1.5/2/2.5-*) через multipart
+`/v1/images/edits` + `minimax/image-01` через `subject_reference`
+(i2i character-reference). Результат — hosted URL, пригоден для
+`generate_video.first_frame_url` (цепочка edit→video).
+
+Нюанс: gpt-image-* отклоняют `response_format` на edits — параметр не
+шлём (b64_json возвращается по умолчанию). Строка `edit_image`
+добавлена в карточку MCP на setup-странице.
+
+**Верификация**: e2e через шлюз — gemini edit 2.8MB png, gpt-image-2
+2.0MB png, minimax i2i 170KB jpg.
+
+---
+
 ### [2026-09-28] — fix: восстановлены zai_* MCP-гранты команд
 
 При выдаче `media` грант перезаписал `object_permission.mcp_servers`
