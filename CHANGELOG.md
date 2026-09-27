@@ -92,6 +92,111 @@ failover на проде не прогонялся — сработает при
 
 ---
 
+### [2026-09-28] — MCP-сервер `media`: image/video/TTS/clone/ASR через LiteLLM-шлюз
+
+**Развёрнут FastMCP-сервер** `/opt/media-mcp/` (venv py3.11 + `mcp<2`,
+systemd `media-mcp.service`, streamable HTTP `0.0.0.0:9101/mcp`).
+Зарегистрирован в `config.yaml mcp_servers.media` (`allow_all_keys: true`,
+`extra_headers: [authorization, x-litellm-api-key]` — VK юзера пробрасывается
+в бэкенд, весь инференс идёт **под ключом юзера**: персональный spend и
+per-model ACL LiteLLM).
+
+**Тузы** (7, ответы компактные — URL'ы, не base64):
+`list_media_models`, `generate_image` (6 litellm image-моделей + minimax
+image-01), `generate_video`/`video_status` (MiniMax **v1**: Hailuo-2.3/02,
+T2V-01 — H3/H3-Max не покрыты планом аккаунта, «TokenPlan does not
+support MiniMax-H3»), `synthesize_speech` (xiaomi mimo voices +
+minimax speech-2.8-hd), `clone_speech` (xiaomi voiceclone, сэмпл =
+URL/data-URI/`upload:<name>`), `transcribe_audio` (xiaomi asr).
+
+**Инфра**: nginx `location /media-files/` → `alias /opt/media-mcp/files/`
+(публичные uuid-URL) + `location = /media-upload` → `:9101/upload`
+(POST Bearer VK → сохранение в `files/uploads/`, валидация VK через
+`/v1/models`); TTL файлов 24ч — `/etc/cron.hourly/media-mcp-clean`.
+Бэкапы: `litellm-bifrost.bak.media-mcp-20260927` (вынесен из
+sites-enabled — nginx грузит *.bak!), `config.yaml.bak.media-mcp-20260927`.
+Доп. passthrough: `/minimax/v1/video_generation`, `/minimax/v1/query/...`,
+`/minimax/v1/files/retrieve`.
+
+**Доступ**: грант `media` в `object_permission.mcp_servers` 11 команд
+(кроме Analytics) — api.py `/mcp` отдаёт URL
+`https://hcbifrost.herocraft.com/litellm/media/mcp` только им.
+
+**Готчи**: `object_permission.mcp_servers` влияет только на ключи с
+`team_id` (gateway-уровень) и на листинг api.py; для user-scoped VK
+нужен `allow_all_keys: true` — модельный ACL остаётся на VK. `server_id`
+MCP-сервера = хеш конфига (меняется при правках блока) — в грантах
+держать имя `media`. Контейнер litellm достаёт хост-сервис только по
+docker-gateway `172.18.0.1` (не 127.0.0.1) + сервер должен слушать 0.0.0.0.
+`asr_options` надо класть в `extra_body`, иначе openai-клиент отвергает
+kwarg.
+
+**Верификация e2e** (VK команды Coders через `/mcp-rest/tools/call`):
+tools/list — 7 тузов; `synthesize_speech` → wav 77KB;
+`generate_image` (gemini-3.1-flash) → png 1.5MB; `clone_speech` → wav 146KB;
+`transcribe_audio` (wav по URL) → «Hello from MCP.»; `generate_video` →
+task_id, `video_status` → Queueing/Processing; `POST /media-upload` →
+url+ref; внешний `POST /litellm/media/mcp` initialize → 200 SSE;
+Analytics-ключ: `/mcp` листинг без `media`. Временные ключи удалены.
+
+---
+
+### [2026-09-27·3] — Setup-страница: редизайн + актуализация + подсказки
+
+Полностью обновлён `/opt/opencode-setup/index.html` (nginx alias — правки
+живые без рестартов; бэкап `.bak.redesign-20260927`, JS-логика генерации
+конфига не тронута):
+
+- **Интерфейс**: тёмная тема с CSS-переменными, карточки, градиентные
+  акценты, grid модельного гайда, стилизованные details-аккордеоны,
+  kbd-плашки, hover-эффекты, адаптив
+- **Актуализировано**: модельный гайд переписан под текущий ряд (GLM-5.3 /
+  Flash, qwen3.8-max 1M ctx / flash, Kimi K3, MiniMax-M3 как лошадка,
+  deepseek-v4.1-flash, mimo-v2.6, step-5-preview, (res)-резервы,
+  highspeed); FALLBACK_MODELS обновлён со старых glm-4.6/kimi-k2-0905 на
+  текущие имена
+- **Новые подсказки юзерам**: карточка «Подсказки по работе» (переключение
+  Tab///models, thinking-варианты low/high/max и их цена, vision-вложения,
+  ценовая дисциплина «флагманы в 10–30× дороже», регенерация конфига при
+  Invalid model name, compaction prune, MCP), «Как применить» в 3 способах
+  (агент/вручную/динамически), траблшутинг-таблица (401/403/429/413)
+- **MiniMax Media API** интегрирован в общий стиль (вместо appended-блока):
+  таблица роутов + примеры TTS и видео submit/poll
+- Пример curl для image-генерации; футер с датой обновления
+
+### [2026-09-27·2] — Ресёрч: MCP-сервер для MiniMax Media (решение отложено, инфа к применению)
+
+Юзер спросил про MCP-обёртку над MiniMax Media API. Ресёрч (без реализации):
+
+**Подтверждено (код в контейнере litellm 1.90.1)**:
+- Прокси поддерживает регистрацию MCP-серверов: конфиг-ключи `mcp_servers` /
+  `mcp_tools` (proxy_server.py:4885-4906), полный менеджер
+  `proxy/_experimental/mcp_server/` (mcp_server_manager, tool_registry,
+  rest_endpoints, **openapi_to_mcp_generator** — умеет автогенерить тузы из
+  OpenAPI-спеки!), маршрут `call_mcp_tool`
+- Тип `MCPServer`: transport http/sse/stdio, `extra_headers`, `allowed_tools`,
+  auth-поля (bearer/oauth/sigv4)
+- MCP python SDK 1.26.0 уже в контейнере
+
+**Архитектура (когда решим делать, ~полдня)**:
+1. FastMCP-сервер на VM (systemd, 127.0.0.1:9101, наружу через nginx
+   `/minimax-mcp/`): тузы `tts` (hex→MP3→URL файла), `image` (base64→URL),
+   `video_create`/`video_status` (submit+poll /v2), `list_voices`; файлы в
+   `/opt/minimax-mcp/files/`, раздаются тем же nginx
+2. Регистрация двумя способами (совместимы): (а) напрямую в opencode.json
+   (`mcp`-секция, remote URL) — родные тузы у агентов; (б) в litellm
+   `mcp_servers` — tool-calling через litellm-шлюз (MCP-gateway концепция
+   Bifrost)
+3. Альтернатива ручному серверу: litellm openapi_to_mcp_generator по
+   самописной OpenAPI-спеке MiniMax (но без инкапсуляции поллинга видео и
+   hex→file — хуже UX)
+
+**Открытые решения юзера**: авторизация публичного эндпоинта (статический
+токен vs валидация LiteLLM VK); видео-тул submit/status vs блокирующийся
+wait; voice_clone в v1 или позже; вариант регистрации (а)/(б)/оба.
+
+---
+
 ### [2026-09-27] — MiniMax Media API: passthrough-роуты (TTS/voice clone/video/image)
 
 **Подключена не-текстовая линейка MiniMax Token Plan** (ключ из credential
