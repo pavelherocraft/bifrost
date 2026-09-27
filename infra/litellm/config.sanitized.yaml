@@ -575,6 +575,12 @@ general_settings:
     methods:
     - GET
     timeout: 120
+  - path: /minimax/v1/files/upload
+    target: https://api.minimax.io/v1/files/upload
+    headers: *id001
+    methods:
+    - POST
+    timeout: 300
 router_settings:
   num_retries: 2
   timeout: 300

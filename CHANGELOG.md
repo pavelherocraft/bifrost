@@ -4,6 +4,28 @@
 
 ---
 
+### [2026-09-28] — MCP `media`: тул `register_voice_clone` (MiniMax persistent clone)
+
+Добавлен тул `register_voice_clone` — persistent-клонирование голоса
+MiniMax: `sample` (общий resolver: URL | data-URI | `upload:` | base64)
+→ `POST /minimax/v1/files/upload` (purpose `voice_clone`, новый
+passthrough-роут в `config.yaml`, бэкап `config.yaml.bak.voiceclone-20260928`)
+→ `POST /minimax/v1/voice_clone` → `voice_id` для повторного синтеза через
+`synthesize_speech(model='minimax/speech-2.8-hd', voice=<voice_id>)`.
+
+**Ограничение аккаунта**: MiniMax TokenPlan отклоняет `voice_clone`
+(`token plan not support model, voice_clone` — как H3-видео). Тул
+оставлен и задокументирован — заработает при апгрейде плана; до тех пор
+рабочий путь клонирования — `clone_speech` (xiaomi zero-shot).
+Пометки добавлены в `list_media_models`, описание тула и карточку
+на setup-странице.
+
+**Верификация**: `files/upload` проходит (file_id получен), синтез с
+системным voice_id через minimax работает (mp3 49KB); voice_clone
+упирается в план — зафиксировано.
+
+---
+
 ### [2026-09-28] — MCP `media`: тул `edit_image` (image-to-image)
 
 Новый тул в `media-mcp` — редактирование картинки по текстовой

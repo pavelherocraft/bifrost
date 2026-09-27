@@ -10,7 +10,8 @@ Generated media is written to FILES_DIR and served publicly by nginx under
 https://hcbifrost.herocraft.com/media-files/ (TTL 24h via cron cleanup).
 
 Tools: list_media_models, generate_image, edit_image, generate_video,
-       video_status, synthesize_speech, clone_speech, transcribe_audio
+       video_status, synthesize_speech, clone_speech,
+       register_voice_clone, transcribe_audio
 Extra route: POST /upload (Bearer VK required) -> files/uploads/.
 """
 
@@ -62,6 +63,10 @@ VIDEO_MODELS = {
     "MiniMax-Hailuo-2.3": "newest, best quality (default)",
     "MiniMax-Hailuo-02": "previous generation",
     "T2V-01": "legacy text-to-video",
+}
+VOICE_CLONE_MODELS = {
+    "voice/xiaomi/mimo-v2.5-tts-voiceclone": "zero-shot clone: sample passed inline with each request (clone_speech) — WORKING",
+    "minimax/speech-2.8-hd (persistent clone)": "register_voice_clone + synthesize_speech(voice=<voice_id>) — NOT available: MiniMax TokenPlan rejects voice_clone (upgrade plan to enable)",
 }
 TTS_MODELS = {
     "voice/xiaomi/mimo-v2.5-tts": "preset mimo voices + style instructions; singing via (唱歌) tag in text",
@@ -167,7 +172,7 @@ def list_media_models() -> dict:
         "image_edit_models": IMAGE_EDIT_MODELS,
         "video_models": VIDEO_MODELS,
         "tts_models": TTS_MODELS,
-        "voice_clone_model": "voice/xiaomi/mimo-v2.5-tts-voiceclone",
+        "voice_clone_models": VOICE_CLONE_MODELS,
         "asr_model": "voice/xiaomi/mimo-v2.5-asr",
         "mimo_voices": MIMO_VOICES,
         "minimax_voices": MINIMAX_VOICES,
@@ -182,6 +187,7 @@ def list_media_models() -> dict:
             "edit_image modifies an existing image (i2i); its output URL can feed generate_video.first_frame_url too",
             "style param = natural-language voice/tone instruction (emotion, pace, accent); audio tags like (laughs)/(sighs) go inside the text",
             "voiceclone sample: wav/mp3, <=10MB, clean speech a few seconds long",
+            "two clone modes: xiaomi zero-shot (clone_speech, per-request, WORKING) vs minimax persistent voice_id (register_voice_clone — blocked by current MiniMax TokenPlan)",
             "voicedesign: voice comes purely from `style` description; voice param not supported",
         ],
     }
@@ -340,7 +346,7 @@ async def synthesize_speech(
     ctx: Context,
     text: Annotated[str, Field(description="Text to speak. Audio tags like (laughs),(sighs),(唱歌) for singing are allowed inside")],
     model: Annotated[str, Field(description="TTS model — see list_media_models().tts_models")] = "voice/xiaomi/mimo-v2.5-tts",
-    voice: Annotated[Optional[str], Field(description="Voice id: mimo voices (mimo_default, Mia, Chloe, Milo, Dean, 冰糖, 茉莉, 苏打, 白桦) or minimax voice ids (female-shaonv, presenter_male, ...)")] = None,
+    voice: Annotated[Optional[str], Field(description="Voice id: mimo presets (mimo_default, Mia, Chloe, Milo, Dean, 冰糖, 茉莉, 苏打, 白桦), minimax system voices (female-shaonv, presenter_male, ...) or a cloned voice_id from register_voice_clone")] = None,
     style: Annotated[Optional[str], Field(description="Natural-language style instruction: emotion, pace, accent. REQUIRED for voicedesign model")] = None,
     format: Annotated[str, Field(description="Output audio format: wav | mp3")] = "wav",
 ) -> dict:
@@ -384,8 +390,9 @@ async def clone_speech(
     style: Annotated[Optional[str], Field(description="Optional style instruction (emotion, pace)")] = None,
     format: Annotated[str, Field(description="Output format: wav | mp3")] = "wav",
 ) -> dict:
-    """TTS in a cloned voice (xiaomi mimo-v2.5-tts-voiceclone).
-    Returns hosted audio URL."""
+    """TTS in a cloned voice (xiaomi mimo-v2.5-tts-voiceclone, zero-shot —
+    sample travels with the request). For a reusable clone use
+    register_voice_clone + synthesize_speech(minimax). Returns audio URL."""
     vk = _vk(ctx)
     async with httpx.AsyncClient(timeout=120) as c:
         raw = await _resolve_source(sample, c)
@@ -404,6 +411,55 @@ async def clone_speech(
     a = (r.json()["choices"][0]["message"].get("audio") or {})
     out = base64.b64decode(a.get("data") or "")
     return {"url": _save(out, _ext_for(out, format)), "bytes": len(out)}
+
+
+@mcp.tool()
+async def register_voice_clone(
+    ctx: Context,
+    sample: Annotated[str, Field(description="Voice sample: http(s) URL | data-URI | 'upload:<name>' | base64. wav/mp3, clean speech (>=10s recommended)")],
+    voice_id: Annotated[Optional[str], Field(description="Custom name for the cloned voice (letters/digits/-_, starts with a letter, >=8 chars). Auto-generated if omitted")] = None,
+    noise_reduction: Annotated[bool, Field(description="Strip background noise from the sample")] = False,
+    volume_normalization: Annotated[bool, Field(description="Normalize sample loudness")] = False,
+) -> dict:
+    """Register a PERSISTENT cloned voice at MiniMax — returns {voice_id}.
+    Reuse it in synthesize_speech(model='minimax/speech-2.8-hd', voice=<voice_id>).
+    Unlike clone_speech (xiaomi zero-shot, per-request), the voice stays
+    registered in the MiniMax account and can be reused across calls.
+
+    WARNING: our MiniMax TokenPlan currently rejects voice_clone
+    ('token plan not support model, voice_clone') — this tool will error
+    until the plan is upgraded. Use clone_speech instead."""
+    vk = _vk(ctx)
+    vid = voice_id or f"mcp-{uuid.uuid4().hex[:8]}"
+    if not re.match(r"^[A-Za-z][A-Za-z0-9_-]{7,}$", vid):
+        raise ValueError("voice_id must start with a letter, >=8 chars, letters/digits/-/_")
+    async with httpx.AsyncClient(timeout=120) as c:
+        raw = await _resolve_source(sample, c)
+    mime = _mime_for(raw)
+    if mime not in ("audio/wav", "audio/mpeg"):
+        raise ValueError(f"sample must be wav or mp3, got {mime}")
+    if len(raw) > MAX_SAMPLE:
+        raise ValueError("sample too large (max ~10MB)")
+
+    ext = _ext_for(raw)
+    r = await _llm(vk, "POST", "/minimax/v1/files/upload", timeout=180,
+                   files={"file": (f"sample{ext}", raw, mime)},
+                   data={"purpose": "voice_clone"})
+    d = r.json()
+    file_id = (d.get("file") or {}).get("file_id") or d.get("file_id")
+    if not file_id:
+        raise ValueError(f"no file_id in upload response: {str(d)[:200]}")
+
+    body = {"file_id": file_id, "voice_id": vid,
+            "need_noise_reduction": noise_reduction,
+            "need_volume_normalization": volume_normalization}
+    r = await _llm(vk, "POST", "/minimax/v1/voice_clone", timeout=180, json=body)
+    d = r.json()
+    br = d.get("base_resp") or {}
+    if br.get("status_code", 0) != 0:
+        raise ValueError(f"minimax voice_clone: {br.get('status_msg')}")
+    return {"voice_id": vid, "file_id": file_id,
+            "usage": f"synthesize_speech(text=..., model='minimax/speech-2.8-hd', voice='{vid}')"}
 
 
 @mcp.tool()
