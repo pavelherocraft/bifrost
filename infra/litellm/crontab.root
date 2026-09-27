@@ -1,0 +1,7 @@
+0 */6 * * * docker exec litellm truncate -s 0 /tmp/hook-trace.log 2>/dev/null; find /var/lib/docker/containers -name "*-json.log" -size +2G -exec truncate -s 0 {} \; 2>/dev/null
+15 3 * * * /opt/litellm/admin/audit_retention.sh # audit-retention
+45 2 * * * /opt/litellm/admin/backup_nightly.sh >> /opt/backups/litellm/backup.log 2>&1
+*/5 * * * * /opt/litellm/admin/healthcheck.sh
+0 4 * * 6 /opt/litellm/admin/weekly_tg_snapshot.sh >> /opt/backups/litellm/backup.log 2>&1
+0 3 1 * * /opt/litellm/admin/monthly_fulldump.sh >> /opt/backups/litellm/backup.log 2>&1
+30 3 * * * /opt/litellm/admin/spendlogs_retention.sh >> /opt/backups/litellm/backup.log 2>&1

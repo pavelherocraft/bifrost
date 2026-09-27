@@ -1,0 +1,434 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GLM Credentials Swap</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { font: 14px/1.4 system-ui, -apple-system, Segoe UI, sans-serif;
+         margin: 0; padding: 24px; max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 8px; }
+  h2 { font-size: 16px; margin: 24px 0 8px; padding-bottom: 4px;
+        border-bottom: 1px solid #8884; }
+  p, label { color: inherit; }
+  .muted { color: #888; font-size: 12px; }
+  code { background: #8882; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  button { font: inherit; padding: 6px 14px; border: 1px solid #8886;
+           border-radius: 4px; background: #8881; color: inherit; cursor: pointer; }
+  button:hover { background: #8883; }
+  button.primary { background: #2563eb; border-color: #2563eb; color: white; }
+  button.primary:hover { background: #1d4ed8; }
+  button.warn { background: #dc2626; border-color: #dc2626; color: white; }
+  button.warn:hover { background: #b91c1c; }
+  select { font: inherit; padding: 4px 8px; border: 1px solid #8886;
+           border-radius: 4px; background: transparent; color: inherit;
+           min-width: 200px; }
+  input[type=checkbox] { transform: scale(1.1); margin-right: 4px; }
+  pre { background: #8881; padding: 12px; border-radius: 4px;
+        overflow-x: auto; font-size: 12px; line-height: 1.4; }
+  .pair-btn { padding: 4px 10px; font-size: 12px; }
+  .pair-equal { color: #b45309; }
+  .pair-missing { color: #b91c1c; }
+  .pair-ok { color: #15803d; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { padding: 4px 8px; text-align: left;
+           border-bottom: 1px solid #8883; }
+  th { font-weight: 600; }
+  .ok { color: #15803d; }
+  .err { color: #b91c1c; }
+</style>
+</head>
+<body>
+<h1>GLM Credentials Swap <span class="muted" style="font-size:11px;font-weight:normal;">v1.6 (2026-08-28)</span></h1>
+<p class="muted">
+  Атомарно копирует <code>litellm_params</code> (включая <code>api_key</code>)
+  и меняет местами <code>model_name</code>. После swap публичное имя
+  (<code>GLM-5.1</code>, <code>GLM-5.3</code>, <code>atlas_glm-5.2</code> и т.п.)
+  продолжает работать в клиентских конфигах, но теперь указывает на строку,
+  в которой раньше был <code>_dont_use</code>-двойник.
+  <br><b>GLM-5.3 — только Z.AI:</b> в Atlas эта модель недоступна, поэтому
+  atlas-теней для 5.3 нет.
+</p>
+
+<div style="background:#8881; padding:10px 12px; border-radius:4px; margin: 12px 0;">
+  <label>LiteLLM master/admin key (sk-...):
+    <input type="password" id="admin-key" style="width: 360px; font-family: monospace;" placeholder="sk-litellm-..." autocomplete="off">
+  </label>
+  <button type="button" id="save-key" class="primary">Сохранить</button>
+  <button type="button" id="test-key">Тест</button>
+  <button type="button" id="clear-key">Очистить</button>
+  <span class="muted" id="key-status"></span>
+  <p class="muted" style="margin: 4px 0 0 0;">
+    Ключ хранится в localStorage браузера. Нужен master admin ключ из
+    <code>/opt/litellm/.env</code> (LITELLM_MASTER_KEY) или admin virtual key из UI.
+  </p>
+</div>
+
+<h2>Quick swap (12 пар)</h2>
+<p class="muted">Promote shadow → active в одну кнопку (атомарно).</p>
+<div class="row" id="pair-buttons"></div>
+
+<h2>Custom swap</h2>
+<form id="swap-form">
+  <div class="grid">
+    <label>FROM (источник litellm_params):
+      <select id="from" required></select>
+    </label>
+    <label>TO (приёмник):
+      <select id="to" required></select>
+    </label>
+  </div>
+   <div class="row" style="margin-top: 12px;">
+     <label><input type="checkbox" id="copy-creds" checked>
+       Copy credentials (api_key, api_base, model)</label>
+     <label title="DANGER: меняет местами public model_name между рядами. Не нужно для обычного swap.">
+       <input type="checkbox" id="swap-names">
+       Swap public model_name (DANGER — ломает клиенты)</label>
+     <label><input type="checkbox" id="dry-run">
+       Dry run (без изменений)</label>
+   </div>
+  <div class="row" style="margin-top: 12px;">
+    <button type="submit" class="primary">Swap</button>
+    <span class="muted" id="status"></span>
+  </div>
+</form>
+
+<h2>Пары (active + _dont_use)</h2>
+<table id="pairs-table">
+  <thead><tr>
+    <th>Active</th><th>Shadow (_dont_use)</th>
+    <th>upstream</th><th>api_base</th><th>cred</th>
+    <th>creds equal?</th>
+  </tr></thead>
+  <tbody></tbody>
+</table>
+
+<h2>Результат операции</h2>
+<pre id="result">(пусто)</pre>
+
+<h2>Управление контейнером</h2>
+<div class="row" style="margin-top: 8px;">
+  <button type="button" id="restart-btn" class="warn">↻ Restart LiteLLM container</button>
+  <span class="muted">SIGTERM → Docker автоматически перезапустит (~30 сек недоступно)</span>
+</div>
+<div id="restart-status" style="margin-top: 8px;"></div>
+
+<script>
+// Quick swap pairings are fetched at runtime from /litellm/admin/glm/quick-swaps
+// (12 pairings; atlas shadow -> GLM-5.1/5.2 main OR (res) variants; GLM-5.3
+//  and GLM-5.3-Flash have Z.AI-only pairs — both are not available on Atlas).
+
+function escapeHtml(s) {
+  if (s == null) return "";
+  return String(s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function shortVal(v, n=40) {
+  if (!v) return "<span class=muted>null</span>";
+  const s = String(v);
+  return s.length > n ? escapeHtml(s.slice(0,n)) + "…" : escapeHtml(s);
+}
+
+async function fetchJson(path, opts) {
+  const headers = Object.assign(
+    {"Accept": "application/json"},
+    (opts && opts.headers) || {}
+  );
+  const key = getKey();
+  if (key) headers["Authorization"] = "Bearer " + key;
+  const r = await fetch(path, Object.assign({}, opts || {}, {headers: headers}));
+  if (!r.ok) {
+    const body = await r.text();
+    throw new Error(`${path} -> HTTP ${r.status}: ${body}`);
+  }
+  return r.json();
+}
+
+function getKey() {
+  return localStorage.getItem("litellm_admin_key") || "";
+}
+
+function setKey(k) {
+  try {
+    if (k) localStorage.setItem("litellm_admin_key", k);
+    else   localStorage.removeItem("litellm_admin_key");
+  } catch (e) {
+    showToast("ОШИБКА сохранения ключа в localStorage: " + e.message +
+      "\n\nВозможно браузер блокирует storage (Private Mode, корпоративные политики, или переполнен localStorage).", "err");
+    return false;
+  }
+  updateKeyStatus();
+  return true;
+}
+
+function showToast(msg, kind) {
+  let t = document.getElementById("toast");
+  if (!t) {
+    t = document.createElement("div");
+    t.id = "toast";
+    t.style.cssText = "position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:2147483647;max-width:600px;padding:10px 14px;border-radius:6px;font:13px/1.4 system-ui,-apple-system,sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.3);white-space:pre-wrap;";
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.background = kind === "err" ? "#dc2626" : (kind === "ok" ? "#16a34a" : "#2563eb");
+  t.style.color = "#fff";
+  t.style.display = "block";
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.display = "none"; }, 6000);
+}
+
+function updateKeyStatus() {
+  const k = getKey();
+  const el = document.getElementById("key-status");
+  if (!el) return;
+  if (k) {
+    el.textContent = "ok (" + k.slice(0, 8) + "… len=" + k.length + ")";
+    el.className = "ok";
+  } else {
+    el.textContent = "не задан";
+    el.className = "err";
+  }
+}
+
+async function load() {
+  const status = document.getElementById("status");
+  const key = getKey();
+  if (!key) {
+    status.innerHTML = '<span class="err">Введите LiteLLM master/admin ключ выше</span>';
+    return;
+  }
+  status.textContent = "loading…";
+  try {
+    // Use absolute paths with /litellm/ prefix so requests go through nginx
+    // to the LiteLLM proxy (the page is served at /litellm/admin/glm-swap/).
+    const models = await fetchJson("/litellm/admin/glm/models");
+    const pairs = await fetchJson("/litellm/admin/glm/pairs");
+    const fromSel = document.getElementById("from");
+    const toSel   = document.getElementById("to");
+    fromSel.innerHTML = "";
+    toSel.innerHTML   = "";
+    for (const m of models) {
+      const o = document.createElement("option");
+      o.value = m.model_name;
+      o.textContent = m.model_name;
+      fromSel.appendChild(o);
+      const o2 = o.cloneNode(true);
+      toSel.appendChild(o2);
+    }
+
+    // Quick-swap buttons (8 pairings from /admin/glm/quick-swaps)
+    const pbtns = document.getElementById("pair-buttons");
+    pbtns.innerHTML = "";
+    let quick_swaps = [];
+    try {
+      quick_swaps = await fetchJson("/litellm/admin/glm/quick-swaps");
+    } catch (e) {
+      const err = document.createElement("span");
+      err.className = "err";
+      err.textContent = "quick-swaps endpoint failed: " + e.message;
+      pbtns.appendChild(err);
+    }
+    for (const qs of quick_swaps) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "pair-btn";
+      b.textContent = `Promote ${qs.from} → ${qs.to}`;
+      b.title = `Копировать litellm_params из ${qs.from} в ${qs.to} + swap model_name`;
+      b.onclick = () => doSwap(qs.from, qs.to);
+      pbtns.appendChild(b);
+    }
+
+    // Pairs table
+    const tbody = document.querySelector("#pairs-table tbody");
+    tbody.innerHTML = "";
+    for (const p of pairs) {
+      const a = p.active, s = p.shadow;
+      const tr = document.createElement("tr");
+      const eq = p.creds_equal
+        ? '<span class="pair-equal">да (idempotent — без изменений)</span>'
+        : '<span class="pair-ok">нет</span>';
+      const shadowCell = p.shadow_exists
+        ? escapeHtml(s.model_name)
+        : '<span class="pair-missing">отсутствует</span>';
+      tr.innerHTML = `
+        <td>${escapeHtml(a.model_name)}</td>
+        <td>${shadowCell}</td>
+        <td>${shortVal(a.upstream_model, 20)}</td>
+        <td>${shortVal(a.api_base, 30)}</td>
+        <td>${a.credential_name ? "named" : (a.api_key_redacted || "")}</td>
+        <td>${eq}</td>`;
+      tbody.appendChild(tr);
+    }
+    status.textContent = `ok: ${models.length} моделей, ${pairs.length} пар`;
+  } catch (e) {
+    status.innerHTML = '<span class="err">' + escapeHtml(String(e)) + '</span>';
+  }
+}
+
+async function doSwap(fromName, toName) {
+  document.getElementById("from").value = fromName;
+  document.getElementById("to").value   = toName;
+  document.getElementById("copy-creds").checked = true;
+  document.getElementById("swap-names").checked = false;
+  document.getElementById("dry-run").checked    = false;
+  document.getElementById("swap-form").dispatchEvent(new Event("submit"));
+}
+
+document.getElementById("swap-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const from = document.getElementById("from").value;
+  const to   = document.getElementById("to").value;
+  const copy_creds = document.getElementById("copy-creds").checked;
+  const swap_names = document.getElementById("swap-names").checked;
+  const dry_run    = document.getElementById("dry-run").checked;
+  if (from === to) {
+    alert("FROM и TO должны различаться");
+    return;
+  }
+  if (!copy_creds && !swap_names) {
+    alert("Нужно выбрать хотя бы одну из опций (copy / swap)");
+    return;
+  }
+  const verb = dry_run ? "DRY-RUN" : "REAL";
+  const msg  = `${verb} swap:\n\n  FROM = ${from}\n  TO   = ${to}\n`
+             + `  copy_creds  = ${copy_creds}\n`
+             + `  swap_names  = ${swap_names}\n\n`
+             + `Продолжить?`;
+  if (!confirm(msg)) return;
+  const result = document.getElementById("result");
+  result.textContent = "executing…";
+  try {
+    const key = getKey();
+    if (!key) {
+      result.innerHTML = '<span class="err">API ключ не задан — введите его выше</span>';
+      return;
+    }
+    const r = await fetch("/litellm/admin/glm/swap", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + key,
+      },
+      body: JSON.stringify({from, to, copy_creds, swap_names, dry_run}),
+    });
+    const text = await r.text();
+    if (!r.ok) {
+      result.innerHTML = '<span class="err">HTTP ' + r.status + ":</span>\n" + escapeHtml(text);
+      return;
+    }
+    result.textContent = text;
+    // Highlight restart warning if present
+    try {
+      const j = JSON.parse(text);
+      if (j.restart_required) {
+        const w = document.createElement("div");
+        w.style.cssText = "margin-top:12px;padding:10px 12px;background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;color:#92400e;font-weight:600;";
+        w.innerHTML = `⚠️ RESTART REQUIRED<br><span style="font-weight:400">${escapeHtml(j.warning || "proxy cache not auto-refreshed")}</span><br><button type="button" id="quick-restart-btn" style="margin-top:8px;padding:6px 14px;border:1px solid #f59e0b;border-radius:4px;background:#f59e0b;color:white;font-weight:600;cursor:pointer;">↻ Restart now</button>`;
+        result.parentNode.insertBefore(w, result.nextSibling);
+        document.getElementById("quick-restart-btn").addEventListener("click", () => {
+          document.getElementById("restart-btn").click();
+          w.remove();
+        });
+      }
+    } catch (_) {}
+    load();  // refresh pairs table
+  } catch (e) {
+    result.innerHTML = '<span class="err">' + escapeHtml(String(e)) + "</span>";
+  }
+});
+
+// === Restart container ===
+document.getElementById("restart-btn").addEventListener("click", async () => {
+  const key = getKey();
+  if (!key) { showToast("Введите ключ сначала", "err"); return; }
+  if (!confirm("Перезапустить LiteLLM контейнер?\nUI будет недоступен ~30 секунд.")) return;
+  const st = document.getElementById("restart-status");
+  st.innerHTML = '<span class="muted">отправка SIGTERM…</span>';
+  try {
+    const r = await fetch("/litellm/admin/restart-proxy", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + key },
+    });
+    if (r.ok) {
+      st.innerHTML = '<span style="color:#f59e0b;font-weight:600;">⏳ Контейнер перезапускается… ждите ~30 сек, потом обновите страницу.</span>';
+      // Poll health endpoint until back
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts++;
+        try {
+          const h = await fetch("/litellm/health/readiness", { signal: AbortSignal.timeout?.(3000) });
+          if (h.ok) {
+            clearInterval(poll);
+            st.innerHTML = '<span class="ok">✓ Контейнер снова работает! (' + attempts*3 + ' сек)</span>';
+            showToast("✓ LiteLLM перезапущен успешно", "ok");
+            setTimeout(() => load(), 2000);
+          }
+        } catch (e) {
+          if (attempts > 40) {  // 120 sec timeout
+            clearInterval(poll);
+            st.innerHTML = '<span class="err">⚠ Превышен таймаут ожидания (120 сек). Проверьте контейнер вручную.</span>';
+          }
+        }
+      }, 3000);
+    } else {
+      const body = await r.text();
+      st.innerHTML = '<span class="err">HTTP ' + r.status + ': ' + escapeHtml(body.slice(0, 200)) + '</span>';
+    }
+  } catch (e) {
+    st.innerHTML = '<span class="err">Запрос не отправлен (контейнер уже падает?): ' + escapeHtml(String(e)) + '</span>';
+  }
+});
+
+// === boot ===
+(function() {
+  const input = document.getElementById("admin-key");
+  const save  = document.getElementById("save-key");
+  const test  = document.getElementById("test-key");
+  const clear = document.getElementById("clear-key");
+  const cur   = getKey();
+  if (cur) input.value = cur;
+  updateKeyStatus();
+
+  save.addEventListener("click", () => {
+    const k = input.value.trim();
+    if (!k) { showToast("Введите ключ", "err"); return; }
+    if (setKey(k)) {
+      showToast("✓ Ключ сохранён в localStorage (" + k.slice(0,12) + "… len=" + k.length + ")", "ok");
+      load();
+    }
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); save.click(); }
+  });
+  test.addEventListener("click", async () => {
+    save.click();
+    const k = getKey();
+    if (!k) return;
+    showToast("Тестирую ключ через /litellm/admin/glm/pairs…", "");
+    try {
+      const r = await fetch("/litellm/admin/glm/pairs", { headers: {"Authorization": "Bearer " + k} });
+      if (r.ok) { showToast("✓ Ключ работает (HTTP " + r.status + ", 6 пар получено)", "ok"); load(); }
+      else { const body = await r.text(); showToast("✗ HTTP " + r.status + ": " + body.slice(0, 300), "err"); }
+    } catch (e) { showToast("✗ Fetch failed: " + e.message, "err"); }
+  });
+  clear.addEventListener("click", () => {
+    setKey("");
+    input.value = "";
+    showToast("Ключ удалён из localStorage", "");
+  });
+
+  if (cur) load();
+  setInterval(() => { if (getKey()) load(); }, 30000);
+
+  // Sanity check: did the JS even run?
+  console.log("[glm-swap] boot ok, current key =", cur ? cur.slice(0,8)+"…" : "(none)");
+})();
+</script>
+</body>
+</html>

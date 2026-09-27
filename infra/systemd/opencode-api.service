@@ -1,0 +1,17 @@
+[Unit]
+Description=opencode-setup model resolution API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/opencode-setup/api.py
+Restart=always
+RestartSec=3
+User=root
+WorkingDirectory=/opt/opencode-setup
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

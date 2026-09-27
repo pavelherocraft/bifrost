@@ -141,6 +141,38 @@ Analytics-ключ: `/mcp` листинг без `media`. Временные к�
 
 ---
 
+### [2026-09-28] — infra/: все кастомные решения VM версионируются в git
+
+Создан топ-уровень **`infra/`** (49 файлов) — снапшот всех кастомных
+артефактов hcbifrost VM; источник истины — VM, синк автоматизирован:
+
+- **litellm/**: user_agent_hook.py, image_rate_limit_hook.py,
+  block_master_key_hook.py, master_key.py, litellm_entrypoint.sh,
+  utils_patched.py (заплатка litellm!), swap_glm_credentials.py,
+  start/stop/start_api.sh, **config.sanitized.yaml** (model_cost +
+  passthrough, секреты замаскированы), nginx/litellm-bifrost.conf,
+  crontab.root, VM_README.md, admin/ ×24 (все живые скрипты)
+- **opencode-setup/**: api.py, index.html (Setup), 4 UI-кнопки
+- **systemd/opencode-api.service**, **sql/audit_schema.sql** (таблица +
+  функция + 4 триггера — DR-восстановление аудита)
+- **tools/sync.ps1**: синк VM → infra/ (+ локальные бэкапы в
+  .opencode/vm-snapshots, gitignored). Автосанитайз на каждый прогон:
+  Bearer-токены, api_key, UI/POSTGRES_PASSWORD, sudo-пароль (из askpass,
+  литерала в скрипте нет — урок самомаскирования пройден дважды),
+  префиксы ключей. Секрет-гейт перед коммитом — финальный скан чистый
+- Субботний таск перенаправлен: `.opencode/bin/sync-vm-snapshots.ps1`
+  стал тонкой обёрткой над `infra/tools/sync.ps1`
+- **Политика** (infra/README.md): никогда не коммитим .env/tg.env/
+  .new_master_key/дампы (хэши ключей!)/.bak/одноразовый мусор
+  (check_*/fix_*/test_* на VM); изменения — на VM, потом sync → коммит
+- Workflow на будущее: изменил VM → sync.ps1 → `git status` покажет диф
+  в infra/ → «пушкоммит»
+
+Попутно start.sh раскрыл 6 ранее неучтённых монтируемых файлов (хуки,
+entrypoint, utils_patched) — включены в инвентарь.
+
+---
+
 ### [2026-09-27·3] — Setup-страница: редизайн + актуализация + подсказки
 
 Полностью обновлён `/opt/opencode-setup/index.html` (nginx alias — правки

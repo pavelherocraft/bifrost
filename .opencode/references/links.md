@@ -73,3 +73,9 @@
 
 - serena memory: `infra/hcbifrost-vm-litellm` (секреты), `infra/litellm-model-updates` (история моделей)
 - скиллы: `litellm-add-model`, `litellm-diagnose`, `litellm-cleanup`, `vm-ssh`
+- **`infra/` в репо** — версионируемые копии ВСЕХ кастомных артефактов VM
+  (хуки, api.py, Setup-страница, admin-скрипты, nginx, crontab, systemd,
+  audit-SQL, config.sanitized.yaml). Синк: `infra/tools/sync.ps1` (суббота
+  09:00 автоматически + руками). После изменений на VM: sync → пушкоммит.
+  Секреты автозамаскированы; .env/tg.env/дампы НИКОГДА не коммитятся
+  (см. infra/README.md)

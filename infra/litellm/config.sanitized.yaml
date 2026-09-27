@@ -1,0 +1,639 @@
+model_list: []
+litellm_settings:
+  drop_params: true
+  store_audit_logs: true
+  set_verbose: true
+  telemetry: false
+  success_callback: []
+  service_callback: []
+  model_cost:
+    GLM-4.7:
+      cache_read_input_token_cost: 1.1e-07
+      input_cost_per_token: 6.0e-07
+      output_cost_per_token: 2.2e-06
+    GLM-5.3:
+      cache_read_input_token_cost: 2.6e-07
+      input_cost_per_token: 1.4e-06
+      output_cost_per_token: 4.4e-06
+    GLM-5.3-Flash:
+      cache_read_input_token_cost: 3.0e-08
+      input_cost_per_token: 1.5e-07
+      output_cost_per_token: 5.0e-07
+    deepseek/deepseek-flash:
+      input_cost_per_token: 3.0e-07
+      output_cost_per_token: 1.2e-06
+      cache_read_input_token_cost: 1.0e-08
+      litellm_provider: custom_openai
+    tencent/DeepSeek-V4.1-Flash:
+      input_cost_per_token: 3.0e-07
+      output_cost_per_token: 1.2e-06
+      cache_read_input_token_cost: 1.0e-08
+      litellm_provider: custom_openai
+    glm-5.3-flash:
+      input_cost_per_token: 1.5e-07
+      output_cost_per_token: 5.0e-07
+      cache_read_input_token_cost: 3.0e-08
+    custom_openai/glm-5.3-flash:
+      cache_read_input_token_cost: 3.0e-08
+      input_cost_per_token: 1.5e-07
+      output_cost_per_token: 5.0e-07
+      litellm_provider: custom_openai
+    hy4-preview:
+      cache_read_input_token_cost: 4.2e-08
+      input_cost_per_token: 8.34e-07
+      output_cost_per_token: 2.501e-06
+    hy3:
+      cache_read_input_token_cost: 4.0e-08
+      input_cost_per_token: 1.4e-07
+      output_cost_per_token: 5.8e-07
+    custom_openai/hy3:
+      cache_read_input_token_cost: 4.0e-08
+      input_cost_per_token: 1.4e-07
+      output_cost_per_token: 5.8e-07
+      litellm_provider: custom_openai
+    custom_openai/hy4-preview:
+      cache_read_input_token_cost: 4.2e-08
+      input_cost_per_token: 8.34e-07
+      output_cost_per_token: 2.501e-06
+      litellm_provider: custom_openai
+    glm-5-2:
+      cache_read_input_token_cost: 2.6e-07
+      input_cost_per_token: 1.4e-06
+      output_cost_per_token: 4.4e-06
+    glm-5-3:
+      cache_read_input_token_cost: 2.6e-07
+      input_cost_per_token: 1.4e-06
+      output_cost_per_token: 4.4e-06
+    glm-4.5-air:
+      cache_read_input_token_cost: 3.0e-08
+      input_cost_per_token: 1.4e-07
+      output_cost_per_token: 8.6e-07
+    zai-org/glm-5.1:
+      cache_read_input_token_cost: 2.6e-07
+      input_cost_per_token: 1.4e-06
+      output_cost_per_token: 4.4e-06
+    zai-org/glm-5.2:
+      cache_read_input_token_cost: 2.6e-07
+      input_cost_per_token: 1.4e-06
+      output_cost_per_token: 4.4e-06
+    openai/glm-4.6:
+      cache_read_input_token_cost: 1.1e-07
+      input_cost_per_token: 5.5e-07
+      output_cost_per_token: 2.2e-06
+    openai/glm-4.5-air:
+      cache_read_input_token_cost: 3.0e-08
+      input_cost_per_token: 1.4e-07
+      output_cost_per_token: 8.6e-07
+    atlas_glm-5.1:
+      cache_read_input_token_cost: 2.6e-07
+      input_cost_per_token: 1.4e-06
+      output_cost_per_token: 4.4e-06
+    atlas_glm-5.2:
+      cache_read_input_token_cost: 2.6e-07
+      input_cost_per_token: 1.4e-06
+      output_cost_per_token: 4.4e-06
+    MiniMax-M2.1-highspeed:
+      cache_read_input_token_cost: 3.0e-08
+      input_cost_per_token: 3.0e-07
+      output_cost_per_token: 1.2e-06
+    MiniMax-M2.5:
+      cache_read_input_token_cost: 3.0e-08
+      input_cost_per_token: 3.0e-07
+      output_cost_per_token: 1.2e-06
+    MiniMax-M2.5-highspeed:
+      cache_read_input_token_cost: 3.0e-08
+      input_cost_per_token: 3.0e-07
+      output_cost_per_token: 1.2e-06
+    MiniMax-M2.7:
+      cache_read_input_token_cost: 6.0e-08
+      input_cost_per_token: 3.0e-07
+      output_cost_per_token: 1.2e-06
+    MiniMax-M2.7 (res):
+      cache_read_input_token_cost: 6.0e-08
+      input_cost_per_token: 3.0e-07
+      output_cost_per_token: 1.2e-06
+    MiniMax-M2.7-highspeed:
+      cache_read_input_token_cost: 6.0e-08
+      input_cost_per_token: 3.0e-07
+      output_cost_per_token: 1.2e-06
+    MiniMax-M3:
+      cache_read_input_token_cost: 6.0e-08
+      input_cost_per_token: 3.0e-07
+      output_cost_per_token: 1.2e-06
+    Minimax-M3:
+      cache_read_input_token_cost: 6.0e-08
+      input_cost_per_token: 3.0e-07
+      output_cost_per_token: 1.2e-06
+    mimo-v2.5:
+      cache_read_input_token_cost: 0.0
+      input_cost_per_token: 1.4e-07
+      output_cost_per_token: 2.8e-07
+    mimo-v2.5-pro:
+      cache_read_input_token_cost: 0.0
+      input_cost_per_token: 4.4e-07
+      output_cost_per_token: 8.7e-07
+    QWEN3.7-plus:
+      cache_read_input_token_cost: 6.4e-08
+      cache_creation_input_token_cost: 4.0e-07
+      input_cost_per_token: 3.2e-07
+      output_cost_per_token: 1.28e-06
+    Qwen3.5-plus:
+      input_cost_per_token: 2.6e-07
+      output_cost_per_token: 1.56e-06
+    qwen3.5-plus:
+      input_cost_per_token: 2.6e-07
+      output_cost_per_token: 1.56e-06
+    qwen3.6-flash:
+      cache_creation_input_token_cost: 2.34375e-07
+      input_cost_per_token: 1.875e-07
+      output_cost_per_token: 1.125e-06
+    qwen3.7-max:
+      cache_read_input_token_cost: 2.95e-07
+      cache_creation_input_token_cost: 1.84375e-06
+      input_cost_per_token: 1.475e-06
+      output_cost_per_token: 4.425e-06
+    qwen3.7-plus:
+      cache_read_input_token_cost: 6.4e-08
+      cache_creation_input_token_cost: 4.0e-07
+      input_cost_per_token: 3.2e-07
+      output_cost_per_token: 1.28e-06
+    qwen3.8-flash:
+      cache_read_input_token_cost: 1.6e-08
+      cache_creation_input_token_cost: 2.0e-07
+      input_cost_per_token: 1.5e-07
+      output_cost_per_token: 4.7e-07
+    qwen3.8-max:
+      cache_read_input_token_cost: 2.5e-07
+      cache_creation_input_token_cost: 2.5e-06
+      input_cost_per_token: 2.0e-06
+      output_cost_per_token: 6.0e-06
+    qwen3.8-max-preview:
+      cache_read_input_token_cost: 2.5e-07
+      cache_creation_input_token_cost: 2.5e-06
+      input_cost_per_token: 2.0e-06
+      output_cost_per_token: 6.0e-06
+    dashscope/qwen3.5-plus:
+      input_cost_per_token: 2.6e-07
+      output_cost_per_token: 1.56e-06
+    dashscope/qwen3.7-plus:
+      cache_read_input_token_cost: 6.4e-08
+      cache_creation_input_token_cost: 4.0e-07
+      input_cost_per_token: 3.2e-07
+      output_cost_per_token: 1.28e-06
+    dashscope/qwen3.8-flash:
+      cache_read_input_token_cost: 1.6e-08
+      cache_creation_input_token_cost: 2.0e-07
+      input_cost_per_token: 1.5e-07
+      output_cost_per_token: 4.7e-07
+    openai/qwen3-max:
+      cache_read_input_token_cost: 1.56e-07
+      cache_creation_input_token_cost: 9.75e-07
+      input_cost_per_token: 7.8e-07
+      output_cost_per_token: 3.9e-06
+    openai/qwen3.6-flash:
+      cache_creation_input_token_cost: 2.34375e-07
+      input_cost_per_token: 1.875e-07
+      output_cost_per_token: 1.125e-06
+    openai/qwen3.7-max:
+      cache_read_input_token_cost: 2.95e-07
+      cache_creation_input_token_cost: 1.84375e-06
+      input_cost_per_token: 1.475e-06
+      output_cost_per_token: 4.425e-06
+    openai/qwen3.8-flash:
+      cache_read_input_token_cost: 1.6e-08
+      cache_creation_input_token_cost: 2.0e-07
+      input_cost_per_token: 1.5e-07
+      output_cost_per_token: 4.7e-07
+    openai/qwen3.8-max:
+      cache_read_input_token_cost: 2.5e-07
+      cache_creation_input_token_cost: 2.5e-06
+      input_cost_per_token: 2.0e-06
+      output_cost_per_token: 6.0e-06
+    openai/qwen3.8-max-preview:
+      cache_read_input_token_cost: 2.5e-07
+      cache_creation_input_token_cost: 2.5e-06
+      input_cost_per_token: 2.0e-06
+      output_cost_per_token: 6.0e-06
+    qwen/qwen3.8-flash:
+      cache_read_input_token_cost: 1.6e-08
+      cache_creation_input_token_cost: 2.0e-07
+      input_cost_per_token: 1.5e-07
+      output_cost_per_token: 4.7e-07
+    qwen/qwen3.8-max:
+      cache_read_input_token_cost: 2.5e-07
+      cache_creation_input_token_cost: 2.5e-06
+      input_cost_per_token: 2.0e-06
+      output_cost_per_token: 6.0e-06
+    Kimi K2.6:
+      cache_read_input_token_cost: 1.6e-07
+      input_cost_per_token: 9.5e-07
+      output_cost_per_token: 4.0e-06
+    Kimi K2.7:
+      cache_read_input_token_cost: 1.5e-07
+      input_cost_per_token: 6.6e-07
+      output_cost_per_token: 3.4e-06
+    Kimi K3:
+      cache_read_input_token_cost: 3.0e-07
+      input_cost_per_token: 3.0e-06
+      output_cost_per_token: 1.5e-05
+    kimi-k2.6:
+      cache_read_input_token_cost: 1.6e-07
+      input_cost_per_token: 9.5e-07
+      output_cost_per_token: 4.0e-06
+    kimi-k2.7:
+      cache_read_input_token_cost: 1.5e-07
+      input_cost_per_token: 6.6e-07
+      output_cost_per_token: 3.4e-06
+    kimi-k3:
+      cache_read_input_token_cost: 3.0e-07
+      input_cost_per_token: 3.0e-06
+      output_cost_per_token: 1.5e-05
+    moonshot/kimi-k2.6:
+      cache_read_input_token_cost: 1.6e-07
+      input_cost_per_token: 9.5e-07
+      output_cost_per_token: 4.0e-06
+    moonshot/kimi-k2.7:
+      cache_read_input_token_cost: 1.5e-07
+      input_cost_per_token: 6.6e-07
+      output_cost_per_token: 3.4e-06
+    moonshot/kimi-k3:
+      cache_read_input_token_cost: 3.0e-07
+      input_cost_per_token: 3.0e-06
+      output_cost_per_token: 1.5e-05
+    openai/kimi-k2-0905-preview:
+      input_cost_per_token: 6.0e-07
+      output_cost_per_token: 2.5e-06
+    deepseek-ai/deepseek-v3.2:
+      cache_read_input_token_cost: 3.0e-08
+      input_cost_per_token: 2.6e-07
+      output_cost_per_token: 4.3e-07
+    deepseek-ai/deepseek-v4-flash:
+      cache_read_input_token_cost: 3.0e-08
+      input_cost_per_token: 1.4e-07
+      output_cost_per_token: 2.8e-07
+    deepseek-v4-flash-0731:
+      cache_read_input_token_cost: 1.0e-08
+      input_cost_per_token: 4.4e-07
+      output_cost_per_token: 1.32e-06
+    deepseek-v4-pro-0813:
+      cache_read_input_token_cost: 4.0e-08
+      input_cost_per_token: 1.32e-06
+      output_cost_per_token: 3.96e-06
+    deepseek-ai/deepseek-v4-flash-0731:
+      cache_read_input_token_cost: 1.0e-08
+      input_cost_per_token: 4.4e-07
+      output_cost_per_token: 1.32e-06
+    deepseek-ai/deepseek-v4-pro:
+      cache_read_input_token_cost: 1.4e-07
+      input_cost_per_token: 1.74e-06
+      output_cost_per_token: 3.48e-06
+    deepseek-ai/deepseek-v4-pro-0813:
+      cache_read_input_token_cost: 4.0e-08
+      input_cost_per_token: 1.32e-06
+      output_cost_per_token: 3.96e-06
+    openai/deepseek-ai/deepseek-v4-pro:
+      cache_read_input_token_cost: 1.4e-07
+      input_cost_per_token: 1.74e-06
+      output_cost_per_token: 3.48e-06
+    openai/deepseek-v4-flash-0731:
+      cache_read_input_token_cost: 1.0e-08
+      input_cost_per_token: 4.4e-07
+      output_cost_per_token: 1.32e-06
+    openai/deepseek-v4-pro-0813:
+      cache_read_input_token_cost: 4.0e-08
+      input_cost_per_token: 1.32e-06
+      output_cost_per_token: 3.96e-06
+    AlibabaTokenPlan/deepseek-v4-flash-0731:
+      cache_read_input_token_cost: 1.0e-08
+      input_cost_per_token: 4.4e-07
+      output_cost_per_token: 1.32e-06
+    bytedance/doubao-seed-2.1-pro-260628:
+      cache_read_input_token_cost: 1.7e-07
+      input_cost_per_token: 8.5e-07
+      output_cost_per_token: 4.15e-06
+    bytedance/doubao-seed-2.1-turbo-260628:
+      cache_read_input_token_cost: 6.0e-08
+      input_cost_per_token: 3.0e-07
+      output_cost_per_token: 1.2e-06
+    openai/bytedance/doubao-seed-2.1-pro-260628:
+      cache_read_input_token_cost: 1.7e-07
+      input_cost_per_token: 8.5e-07
+      output_cost_per_token: 4.15e-06
+    gpt-3.5-turbo:
+      input_cost_per_token: 5.0e-07
+      output_cost_per_token: 1.5e-06
+    gpt-3.5-turbo-instruct:
+      input_cost_per_token: 1.5e-06
+      output_cost_per_token: 2.0e-06
+    gpt-4o:
+      cache_read_input_token_cost: 1.25e-06
+      input_cost_per_token: 2.5e-06
+      output_cost_per_token: 1.0e-05
+    gpt-4o-mini:
+      cache_read_input_token_cost: 7.0e-08
+      input_cost_per_token: 1.5e-07
+      output_cost_per_token: 6.0e-07
+    gpt-5.2:
+      cache_read_input_token_cost: 1.7e-07
+      input_cost_per_token: 1.75e-06
+      output_cost_per_token: 1.4e-05
+    gpt-5.5:
+      cache_read_input_token_cost: 5.5e-07
+      input_cost_per_token: 5.5e-06
+      output_cost_per_token: 3.3e-05
+    gpt-5.6-sol:
+      cache_read_input_token_cost: 5.5e-07
+      cache_creation_input_token_cost: 2.5e-06
+      input_cost_per_token: 5.5e-06
+      output_cost_per_token: 3.3e-05
+    gpt-5.6-luna:
+      cache_read_input_token_cost: 2.0e-08
+      cache_creation_input_token_cost: 2.5e-07
+      input_cost_per_token: 2.2e-07
+      output_cost_per_token: 1.32e-06
+    gpt-image-1.5:
+      cache_read_input_token_cost: 1.25e-06
+      input_cost_per_token: 2.5e-06
+      output_cost_per_token: 1.0e-05
+    gpt-image-2:
+      cache_read_input_token_cost: 1.25e-06
+      input_cost_per_token: 1.0e-05
+    gpt-image-2.5-sunburst:
+      input_cost_per_token: 5.0e-06
+      cache_read_input_token_cost: 1.25e-06
+      input_cost_per_image_token: 8.0e-06
+      output_cost_per_image_token: 3.0e-05
+      mode: image_generation
+    gpt-image-2.5-flare:
+      input_cost_per_token: 5.0e-06
+      cache_read_input_token_cost: 1.25e-06
+      input_cost_per_image_token: 8.0e-06
+      output_cost_per_image_token: 3.0e-05
+      mode: image_generation
+      output_cost_per_token: 1.0e-05
+    claude-3-haiku-20240307:
+      cache_read_input_token_cost: 3.0e-08
+      cache_creation_input_token_cost: 3.0e-07
+      input_cost_per_token: 2.5e-07
+      output_cost_per_token: 1.25e-06
+    claude-haiku-4-5-20251001:
+      cache_read_input_token_cost: 1.0e-07
+      cache_creation_input_token_cost: 1.25e-06
+      input_cost_per_token: 1.0e-06
+      output_cost_per_token: 5.0e-06
+    anthropic/claude-sonnet-5:
+      cache_read_input_token_cost: 2.0e-07
+      cache_creation_input_token_cost: 2.5e-06
+      input_cost_per_token: 2.0e-06
+      output_cost_per_token: 1.0e-05
+    claude-opus-5:
+      cache_read_input_token_cost: 5.0e-07
+      cache_creation_input_token_cost: 6.25e-06
+      input_cost_per_token: 5.0e-06
+      output_cost_per_token: 2.5e-05
+    claude-fable-5:
+      cache_read_input_token_cost: 1.0e-06
+      cache_creation_input_token_cost: 1.25e-05
+      input_cost_per_token: 1.0e-05
+      output_cost_per_token: 5.0e-05
+    claude-sonnet-4-6:
+      cache_read_input_token_cost: 3.0e-07
+      cache_creation_input_token_cost: 3.75e-06
+      input_cost_per_token: 3.0e-06
+      output_cost_per_token: 1.5e-05
+    cx/gpt-5.6-sol:
+      cache_read_input_token_cost: 5.5e-07
+      cache_creation_input_token_cost: 2.5e-06
+      input_cost_per_token: 5.5e-06
+      output_cost_per_token: 3.3e-05
+    sex/gpt-5.6-sol:
+      cache_read_input_token_cost: 5.5e-07
+      cache_creation_input_token_cost: 2.5e-06
+      input_cost_per_token: 5.5e-06
+      output_cost_per_token: 3.3e-05
+    atlas/qwen3.8-max:
+      cache_read_input_token_cost: 2.5e-07
+      cache_creation_input_token_cost: 2.5e-06
+      input_cost_per_token: 2.0e-06
+      output_cost_per_token: 6.0e-06
+    weblate-judge-deepseek-v4-pro:
+      cache_read_input_token_cost: 1.4e-07
+      input_cost_per_token: 1.74e-06
+      output_cost_per_token: 3.48e-06
+    k3-256k:
+      cache_read_input_token_cost: 1.026e-07
+      input_cost_per_token: 1.5e-06
+      output_cost_per_token: 7.5e-06
+    custom_openai/k3-256k:
+      cache_read_input_token_cost: 1.026e-07
+      input_cost_per_token: 1.5e-06
+      output_cost_per_token: 7.5e-06
+    kimi-for-coding:
+      cache_read_input_token_cost: 1.5e-07
+      input_cost_per_token: 6.6e-07
+      output_cost_per_token: 3.4e-06
+    custom_openai/kimi-for-coding:
+      cache_read_input_token_cost: 1.5e-07
+      input_cost_per_token: 6.6e-07
+      output_cost_per_token: 3.4e-06
+    Kimi K3-256K:
+      cache_read_input_token_cost: 1.026e-07
+      input_cost_per_token: 1.5e-06
+      output_cost_per_token: 7.5e-06
+    Kimi K2.8:
+      cache_read_input_token_cost: 1.5e-07
+      input_cost_per_token: 6.6e-07
+      output_cost_per_token: 3.4e-06
+    tencent/glm5-3flash (reserved - use when main is exhausted):
+      cache_read_input_token_cost: 3.0e-08
+      input_cost_per_token: 1.5e-07
+      output_cost_per_token: 5.0e-07
+    custom_openai/GLM-5.3-Flash:
+      cache_read_input_token_cost: 3.0e-08
+      input_cost_per_token: 1.5e-07
+      output_cost_per_token: 5.0e-07
+    tencent/Kimi K3 (reserved - use when main is exhausted):
+      input_cost_per_token: 3.0e-06
+      output_cost_per_token: 1.5e-05
+      cache_read_input_token_cost: 3.0e-07
+    openrouter/deepseek/deepseek-v4.1-flash:
+      input_cost_per_token: 3.0e-07
+      output_cost_per_token: 1.2e-06
+      cache_read_input_token_cost: 1.0e-08
+    xiaomi/mimo-v2.6-pro:
+      input_cost_per_token: 4.35e-07
+      output_cost_per_token: 8.7e-07
+      cache_read_input_token_cost: 3.6e-09
+    mimo-v2.6-pro:
+      input_cost_per_token: 4.35e-07
+      output_cost_per_token: 8.7e-07
+      cache_read_input_token_cost: 3.6e-09
+    xiaomi/mimo-v2.6-flash:
+      input_cost_per_token: 1.4e-07
+      output_cost_per_token: 2.8e-07
+      cache_read_input_token_cost: 2.8e-09
+    mimo-v2.6-flash:
+      input_cost_per_token: 1.4e-07
+      output_cost_per_token: 2.8e-07
+      cache_read_input_token_cost: 2.8e-09
+    voice/xiaomi/mimo-v2.5-asr:
+      input_cost_per_second: 2.0556e-05
+      input_cost_per_token: 0.0
+      output_cost_per_token: 0.0
+    mimo-v2.5-asr:
+      input_cost_per_second: 2.0556e-05
+      input_cost_per_token: 0.0
+      output_cost_per_token: 0.0
+    voice/xiaomi/mimo-v2.5-tts:
+      input_cost_per_token: 0.0
+      output_cost_per_token: 0.0
+    mimo-v2.5-tts:
+      input_cost_per_token: 0.0
+      output_cost_per_token: 0.0
+    voice/xiaomi/mimo-v2.5-tts-voiceclone:
+      input_cost_per_token: 0.0
+      output_cost_per_token: 0.0
+    mimo-v2.5-tts-voiceclone:
+      input_cost_per_token: 0.0
+      output_cost_per_token: 0.0
+    voice/xiaomi/mimo-v2.5-tts-voicedesign:
+      input_cost_per_token: 0.0
+      output_cost_per_token: 0.0
+    mimo-v2.5-tts-voicedesign:
+      input_cost_per_token: 0.0
+      output_cost_per_token: 0.0
+    stepfun/step-5-preview:
+      input_cost_per_token: 1.0e-06
+      output_cost_per_token: 2.7e-06
+    step-5-preview:
+      input_cost_per_token: 1.0e-06
+      output_cost_per_token: 2.7e-06
+    stepfun/step-3.5-flash-2603:
+      input_cost_per_token: 1.0e-07
+      output_cost_per_token: 3.0e-07
+    step-3.5-flash-2603:
+      input_cost_per_token: 1.0e-07
+      output_cost_per_token: 3.0e-07
+    stepfun/step-3.7-flash:
+      input_cost_per_token: 2.0e-07
+      output_cost_per_token: 1.15e-06
+      cache_read_input_token_cost: 4.0e-08
+    step-3.7-flash:
+      input_cost_per_token: 2.0e-07
+      output_cost_per_token: 1.15e-06
+      cache_read_input_token_cost: 4.0e-08
+general_settings:
+  database_url: os.environ/DATABASE_URL
+  pass_through_endpoints:
+  - path: /minimax/v1/t2a_v2
+    target: https://api.minimax.io/v1/t2a_v2
+    headers: &id001
+      Authorization: Bearer <MASKED>
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) hcproxy/1.0
+    methods:
+    - POST
+    timeout: 300
+  - path: /minimax/v1/voice_clone
+    target: https://api.minimax.io/v1/voice_clone
+    headers: *id001
+    methods:
+    - POST
+    timeout: 300
+  - path: /minimax/v1/image_generation
+    target: https://api.minimax.io/v1/image_generation
+    headers: *id001
+    methods:
+    - POST
+    timeout: 300
+  - path: /minimax/v1/video_generation
+    target: https://api.minimax.io/v1/video_generation
+    headers: *id001
+    methods:
+    - POST
+    timeout: 120
+  - path: /minimax/v1/query/video_generation
+    target: https://api.minimax.io/v1/query/video_generation
+    headers: *id001
+    methods:
+    - GET
+    timeout: 60
+  - path: /minimax/v2/video_generation
+    target: https://api.minimax.io/v2/video_generation
+    headers: *id001
+    methods:
+    - POST
+    timeout: 300
+  - path: /minimax/v2/query/video_generation
+    target: https://api.minimax.io/v2/query/video_generation
+    headers: *id001
+    methods:
+    - GET
+    timeout: 60
+  - path: /minimax/v1/files/retrieve
+    target: https://api.minimax.io/v1/files/retrieve
+    headers: *id001
+    methods:
+    - GET
+    timeout: 120
+router_settings:
+  num_retries: 2
+  timeout: 300
+  allowed_fails: 5
+  cooldown_time: 30
+  disable_cooldowns: true
+  fallbacks:
+  - GLM-5.3:
+    - GLM-5.3 (res)
+    - tencent/glm-5-3 (reserved - use when main is exhausted)
+  - GLM-5.3 (res):
+    - GLM-5.3
+    - tencent/glm-5-3 (reserved - use when main is exhausted)
+  - GLM-5.3-Flash:
+    - GLM-5.3-Flash (res)
+    - tencent/glm5-3flash (reserved - use when main is exhausted)
+  - GLM-5.3-Flash (res):
+    - GLM-5.3-Flash
+    - tencent/glm5-3flash (reserved - use when main is exhausted)
+  - Kimi K3:
+    - tencent/Kimi K3 (reserved - use when main is exhausted)
+mcp_servers:
+  media:
+    url: http://172.18.0.1:9101/mcp
+    transport: http
+    allow_all_keys: true
+    extra_headers: ["authorization", "x-litellm-api-key"]
+    description: "Media generation: images, video (MiniMax), TTS, voice clone, ASR"
+
+  zai_web_search:
+    url: https://api.z.ai/api/mcp/web_search_prime/mcp
+    transport: http
+    auth_type: bearer_token
+    auth_value: os.environ/ZAI_API_KEY
+    allow_all_keys: true
+    description: Z.AI Web Search MCP
+    static_headers:
+      User-Agent: opencode-ai/1.0.123
+      X-Client-Type: opencode-cli
+      X-Client-Version: 1.0.123
+  zai_web_reader:
+    url: https://api.z.ai/api/mcp/web_reader/mcp
+    transport: http
+    auth_type: bearer_token
+    auth_value: os.environ/ZAI_API_KEY
+    allow_all_keys: true
+    description: Z.AI Web Reader MCP
+    static_headers:
+      User-Agent: opencode-ai/1.0.123
+      X-Client-Type: opencode-cli
+      X-Client-Version: 1.0.123
+  zai_zread:
+    url: https://api.z.ai/api/mcp/zread/mcp
+    transport: http
+    auth_type: bearer_token
+    auth_value: os.environ/ZAI_API_KEY
+    allow_all_keys: true
+    description: Z.AI Zread MCP
+    static_headers:
+      User-Agent: opencode-ai/1.0.123
+      X-Client-Type: opencode-cli
+      X-Client-Version: 1.0.123

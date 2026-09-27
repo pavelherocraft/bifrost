@@ -1,0 +1,569 @@
+upstream litellm_upstream {
+    server 127.0.0.1:4001;
+    keepalive 16;
+}
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    listen 8080;
+    listen [::]:8080;
+    server_name hcbifrost.herocraft.com;
+    # Block China IP ranges (8801 CIDRs from ipdeny.com)
+    if ($is_cn = yes) {
+        return 403;
+    }
+
+    client_max_body_size 100M;
+    absolute_redirect off;
+
+    # ---- opencode-setup generator (static + api) ----
+    location ^~ /setup-opencode {
+        alias /opt/opencode-setup/;
+        index index.html;
+        try_files $uri $uri/ /index.html =404;
+    }
+    location ^~ /setup-opencode/api/ {
+        proxy_pass http://127.0.0.1:9000/;
+        proxy_set_header Host $host;
+        proxy_http_version 1.1;
+        proxy_read_timeout 10s;
+        access_log off;
+    }
+
+    location = / {
+        return 302 /litellm/ui/;
+    }
+
+    # ---- LiteLLM UI SPA at /ui/ (without /litellm/ prefix) ----
+    # LiteLLM Next.js UI generates invite URLs as ${origin}/ui/?invitation_id=<id>
+    # and shares them with new users. Without this rule, nginx returns 404 for /ui/*
+    # because the /litellm/ catch-all doesn't match.
+    # /litellm/ prefix in proxy_pass is REQUIRED: LiteLLM FastAPI serves UI under
+    # SERVER_ROOT_PATH=/litellm, so /ui/ returns 404 but /litellm/ui/ returns 200.
+    location ^~ /ui/ {
+        proxy_pass http://litellm_upstream/litellm/ui/;
+        include /etc/nginx/snippets/proxy-common.conf;
+        proxy_hide_header Content-Security-Policy;
+        proxy_hide_header X-Frame-Options;
+        sub_filter '</head>' '<script src="/setup-opencode/users-btn.js?v=16"></script><script src="/setup-opencode/vkeys-btn.js?v=7"></script><script src="/setup-opencode/glm-swap-btn.js?v=1"></script></head>';
+        sub_filter_once off;
+    }
+
+    # ---- LiteLLM invite/onboarding routes (no /litellm/ prefix) ----
+    # The Next.js UI generates invite URLs as `${origin}/onboarding?invite_link=<id>`
+    # and calls `/invitation/*` + `/onboarding/*` relatively. Without these
+    # rules nginx returns 404 because the /litellm/ catch-all doesn't match.
+    location = /onboarding {
+        # SPA page - proxy to LiteLLM's /litellm/ui/onboarding/ route (Next.js renders there).
+        # CRITICAL: path MUST include /litellm/ prefix because LiteLLM serves the UI
+        # under SERVER_ROOT_PATH=/litellm. /ui/onboarding/ returns 404; /litellm/ui/onboarding/ returns 200.
+        # (Same reason why /litellm/ catch-all above works via @litellm_ui fallback that re-sends the full path.)
+        # Trailing slash REQUIRED: without it LiteLLM returns 307 redirect to add the slash,
+        # which drops query params (including ?invite_link=...).
+        proxy_pass http://litellm_upstream/litellm/ui/onboarding/$is_args$args;
+        include /etc/nginx/snippets/proxy-common.conf;
+        proxy_hide_header Content-Security-Policy;
+        proxy_hide_header X-Frame-Options;
+        sub_filter '</head>' '<script src="/setup-opencode/users-btn.js?v=16"></script><script src="/setup-opencode/vkeys-btn.js?v=7"></script><script src="/setup-opencode/glm-swap-btn.js?v=1"></script></head>';
+        sub_filter_once off;
+    }
+    location ~ ^/(invitation|onboarding)/ {
+        # API endpoints: /invitation/{new,info,update} + /onboarding/{get_token,claim_token}
+        proxy_pass http://litellm_upstream;
+        include /etc/nginx/snippets/proxy-common.conf;
+        proxy_hide_header Content-Security-Policy;
+        proxy_hide_header X-Frame-Options;
+    }
+
+    # ---- LiteLLM catch-all (API + UI + assets + Swagger + a2a + ...) ----
+
+
+    # ============================================================
+    # ADMIN ENDPOINTS WHITELIST (v2) — added 2026-07-10 22:50
+    # Concrete ^~ blocks take priority over /litellm/ prefix.
+    # Allowed IPs: 89.19.213.124, 162.55.180.78, 127.0.0.1, 10.10.10.1
+    # ============================================================
+
+    location ^~ /litellm/ui {
+        proxy_pass http://127.0.0.1:4001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        client_max_body_size 50m;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+        proxy_hide_header Content-Security-Policy;
+        proxy_hide_header X-Frame-Options;
+        sub_filter '</head>' '<script src="/setup-opencode/users-btn.js?v=16"></script><script src="/setup-opencode/vkeys-btn.js?v=7"></script><script src="/setup-opencode/glm-swap-btn.js?v=1"></script></head>';
+        sub_filter_once off;
+        }
+    location ^~ /litellm/ui/login {
+        proxy_pass http://127.0.0.1:4001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        client_max_body_size 50m;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+        proxy_hide_header Content-Security-Policy;
+        proxy_hide_header X-Frame-Options;
+        sub_filter '</head>' '<script src="/setup-opencode/users-btn.js?v=16"></script><script src="/setup-opencode/vkeys-btn.js?v=7"></script><script src="/setup-opencode/glm-swap-btn.js?v=1"></script></head>';
+        sub_filter_once off;
+        }
+    location ^~ /litellm/v2/login {
+        proxy_pass http://127.0.0.1:4001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        client_max_body_size 50m;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+    location ^~ /litellm/v1/model/info {
+        proxy_pass http://127.0.0.1:4001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        client_max_body_size 50m;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+    location ^~ /litellm/model/info {
+        proxy_pass http://127.0.0.1:4001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        client_max_body_size 50m;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+    location ^~ /litellm/v2/model/info {
+        proxy_pass http://127.0.0.1:4001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        client_max_body_size 50m;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+    location ^~ /litellm/credentials {
+        proxy_pass http://127.0.0.1:4001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        client_max_body_size 50m;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+    location ^~ /litellm/key/list {
+        proxy_pass http://127.0.0.1:4001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        client_max_body_size 50m;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+    location ^~ /litellm/key/info {
+        proxy_pass http://127.0.0.1:4001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        client_max_body_size 50m;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+    location ^~ /litellm/key/generate {
+        allow 89.19.213.124;
+        allow 162.55.180.78;
+        allow 31.77.201.242;
+        allow 193.160.209.118;
+        allow 91.108.1.0;
+        allow 127.0.0.1;
+        allow 10.10.10.1;
+        deny all;
+        proxy_pass http://127.0.0.1:4001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        client_max_body_size 50m;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+    location ^~ /litellm/key/update {
+        allow 89.19.213.124;
+        allow 162.55.180.78;
+        allow 31.77.201.242;
+        allow 193.160.209.118;
+        allow 91.108.1.0;
+        allow 127.0.0.1;
+        allow 10.10.10.1;
+        deny all;
+        proxy_pass http://127.0.0.1:4001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        client_max_body_size 50m;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+    location ^~ /litellm/key/delete {
+        allow 89.19.213.124;
+        allow 162.55.180.78;
+        allow 31.77.201.242;
+        allow 193.160.209.118;
+        allow 91.108.1.0;
+        allow 127.0.0.1;
+        allow 10.10.10.1;
+        deny all;
+        proxy_pass http://127.0.0.1:4001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        client_max_body_size 50m;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+    location ^~ /litellm/spend/logs {
+        proxy_pass http://127.0.0.1:4001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        client_max_body_size 50m;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+    location ^~ /litellm/global/spend {
+        proxy_pass http://127.0.0.1:4001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        client_max_body_size 50m;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+    location ^~ /litellm/config/list {
+        allow 89.19.213.124;
+        allow 162.55.180.78;
+        allow 31.77.201.242;
+        allow 193.160.209.118;
+        allow 91.108.1.0;
+        allow 127.0.0.1;
+        allow 10.10.10.1;
+        deny all;
+        proxy_pass http://127.0.0.1:4001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        client_max_body_size 50m;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+    location ^~ /litellm/get/config {
+        allow 89.19.213.124;
+        allow 162.55.180.78;
+        allow 31.77.201.242;
+        allow 193.160.209.118;
+        allow 91.108.1.0;
+        allow 127.0.0.1;
+        allow 10.10.10.1;
+        deny all;
+        proxy_pass http://127.0.0.1:4001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        client_max_body_size 50m;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+    location ^~ /litellm/user {
+        proxy_pass http://127.0.0.1:4001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        client_max_body_size 50m;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+    location ^~ /litellm/team {
+        proxy_pass http://127.0.0.1:4001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        client_max_body_size 50m;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+    location ^~ /litellm/organization {
+        allow 89.19.213.124;
+        allow 162.55.180.78;
+        allow 31.77.201.242;
+        allow 193.160.209.118;
+        allow 91.108.1.0;
+        allow 127.0.0.1;
+        allow 10.10.10.1;
+        deny all;
+        proxy_pass http://127.0.0.1:4001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        client_max_body_size 50m;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+    location ^~ /litellm/guardrails {
+        allow 89.19.213.124;
+        allow 162.55.180.78;
+        allow 31.77.201.242;
+        allow 193.160.209.118;
+        allow 91.108.1.0;
+        allow 127.0.0.1;
+        allow 10.10.10.1;
+        deny all;
+        proxy_pass http://127.0.0.1:4001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        client_max_body_size 50m;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+    location ^~ /litellm/model/new {
+        allow 89.19.213.124;
+        allow 162.55.180.78;
+        allow 31.77.201.242;
+        allow 193.160.209.118;
+        allow 91.108.1.0;
+        allow 127.0.0.1;
+        allow 10.10.10.1;
+        deny all;
+        proxy_pass http://127.0.0.1:4001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        client_max_body_size 50m;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+    location ^~ /litellm/model/update {
+        allow 89.19.213.124;
+        allow 162.55.180.78;
+        allow 31.77.201.242;
+        allow 193.160.209.118;
+        allow 91.108.1.0;
+        allow 127.0.0.1;
+        allow 10.10.10.1;
+        deny all;
+        proxy_pass http://127.0.0.1:4001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        client_max_body_size 50m;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+    location ^~ /litellm/model/delete {
+        allow 89.19.213.124;
+        allow 162.55.180.78;
+        allow 31.77.201.242;
+        allow 193.160.209.118;
+        allow 91.108.1.0;
+        allow 127.0.0.1;
+        allow 10.10.10.1;
+        deny all;
+        proxy_pass http://127.0.0.1:4001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        client_max_body_size 50m;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+    location ^~ /litellm/sso {
+        allow 89.19.213.124;
+        allow 162.55.180.78;
+        allow 31.77.201.242;
+        allow 193.160.209.118;
+        allow 91.108.1.0;
+        allow 127.0.0.1;
+        allow 10.10.10.1;
+        deny all;
+        proxy_pass http://127.0.0.1:4001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        client_max_body_size 50m;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+
+    location ^~ /litellm/ {
+        proxy_pass http://litellm_upstream/;
+        include /etc/nginx/snippets/proxy-common.conf;
+        proxy_intercept_errors on;
+        error_page 404 = @litellm_ui;
+
+        # Strip /litellm-asset-prefix/ sentinel + inject OpenCode UI buttons
+        # + inject a floating "GLM Swap" button that links to /litellm/admin/glm-swap/
+        # (apply once per occurrence; default sub_filter_types includes text/html)
+        sub_filter '/litellm-asset-prefix/' '/';
+        sub_filter '</head>' '<script src="/setup-opencode/users-btn.js?v=16"></script><script src="/setup-opencode/vkeys-btn.js?v=7"></script><script src="/setup-opencode/glm-swap-btn.js?v=1"></script></head>';
+        sub_filter_once off;
+
+        # Hide CSP/X-Frame-Options from upstream LiteLLM — otherwise its
+        # `frame-ancestors 'none'` / `script-src 'self'` blocks injected script
+        proxy_hide_header Content-Security-Policy;
+        proxy_hide_header X-Frame-Options;
+    }
+
+    # SPA fallback for unknown /litellm/* paths (Next.js client-side routing)
+    location @litellm_ui {
+        proxy_pass http://litellm_upstream;
+        include /etc/nginx/snippets/proxy-common.conf;
+        proxy_hide_header Content-Security-Policy;
+        proxy_hide_header X-Frame-Options;
+        sub_filter '</head>' '<script src="/setup-opencode/users-btn.js?v=16"></script><script src="/setup-opencode/vkeys-btn.js?v=7"></script><script src="/setup-opencode/glm-swap-btn.js?v=1"></script></head>';
+        sub_filter_once off;
+    }
+
+    # === GLM Swap admin UI: no-cache, JS-buster on btn ===
+    location ^~ /litellm/admin/glm-swap/ {
+        allow 89.19.213.124;
+        allow 162.55.180.78;
+        allow 31.77.201.242;
+        allow 193.160.209.118;
+        allow 91.108.1.0;
+        allow 127.0.0.1;
+        allow 10.10.10.1;
+        deny all;
+
+        proxy_pass http://litellm_upstream/litellm/admin/glm-swap/;
+        include /etc/nginx/snippets/proxy-common.conf;
+        proxy_hide_header Content-Security-Policy;
+        proxy_hide_header X-Frame-Options;
+        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+        add_header Pragma "no-cache" always;
+        add_header Expires "0" always;
+    }
+}
+
+server {
+    listen 8080 default_server;
+    listen [::]:8080 default_server;
+    server_name _;
+    client_max_body_size 100M;
+    location ^~ /v1/ {
+        return 404;
+    }
+
+    location / {
+        proxy_pass http://litellm_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+        proxy_buffering on;
+        add_header Cache-Control "no-cache, no-transform" always;
+    }
+}

@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>opencode.json — Bifrost LiteLLM</title>
+<style>
+  :root{
+    --bg:#0b0d12; --panel:#12151d; --panel2:#161a24; --border:#232838;
+    --border-hi:#2e3648; --text:#e7ebf3; --muted:#8b93a7; --dim:#5d6577;
+    --accent:#6366f1; --accent2:#818cf8; --accent-bg:rgba(99,102,241,.12);
+    --green:#10b981; --green-bg:rgba(16,185,129,.12);
+    --amber:#f59e0b; --amber-bg:rgba(245,158,11,.12);
+    --blue:#38bdf8; --blue-bg:rgba(56,189,248,.1);
+    --pink:#ec4899; --red:#ef4444; --red-bg:rgba(239,68,68,.1);
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);padding:0 20px 80px;line-height:1.55;
+    background-image:radial-gradient(900px 300px at 50% -80px,rgba(99,102,241,.13),transparent 70%)}
+  .wrap{max-width:none;margin:0 auto}
+
+  /* ---------- header ---------- */
+  header{padding:36px 0 8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .logo{width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#6366f1,#a855f7);
+    display:flex;align-items:center;justify-content:center;font-size:21px;box-shadow:0 4px 24px rgba(99,102,241,.35)}
+  h1{font-size:22px;letter-spacing:-.02em}
+  .sub{color:var(--muted);font-size:13px;margin-top:2px}
+  .sub code{color:var(--accent2);font-family:var(--mono);font-size:12px;background:var(--accent-bg);padding:2px 7px;border-radius:5px}
+
+  .badge{display:inline-flex;align-items:center;gap:6px;background:var(--accent-bg);color:var(--accent2);
+    padding:5px 12px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid rgba(99,102,241,.3);word-break:break-all}
+  .badge.warn{background:var(--amber-bg);color:var(--amber);border-color:rgba(245,158,11,.3)}
+
+  /* ---------- cards ---------- */
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px 22px;margin-top:16px}
+  .card>h2{font-size:15px;display:flex;align-items:center;gap:9px;margin-bottom:10px;letter-spacing:-.01em}
+  .card>h2 .ico{font-size:17px}
+  .card p{color:var(--muted);font-size:13.5px}
+  .card b{color:var(--text)}
+  .card code{font-family:var(--mono);font-size:12px;background:rgba(255,255,255,.06);padding:2px 6px;border-radius:4px;color:#c9d1e3}
+  details{border:1px solid var(--border);border-radius:10px;margin-top:10px;background:var(--panel2)}
+  details summary{cursor:pointer;padding:11px 14px;font-size:13px;font-weight:600;color:var(--accent2);list-style:none;user-select:none}
+  details summary::before{content:"▸ ";color:var(--dim)}
+  details[open] summary::before{content:"▾ "}
+  details .inner{padding:2px 16px 14px;color:var(--muted);font-size:13px}
+  details .inner ol,details .inner ul{margin:6px 0 4px 20px}
+  details .inner li{margin-bottom:6px}
+
+  /* ---------- config output ---------- */
+  textarea{width:100%;height:440px;background:#08090d;color:#c9d1e3;border:1px solid var(--border);
+    border-radius:12px;padding:16px;font-family:var(--mono);font-size:12.5px;line-height:1.6;resize:vertical;white-space:pre}
+  .btns{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+  button{background:linear-gradient(135deg,#6366f1,#7c3aed);color:#fff;border:0;padding:11px 22px;border-radius:10px;
+    font-size:13.5px;font-weight:600;cursor:pointer;box-shadow:0 2px 12px rgba(99,102,241,.3);transition:.15s}
+  button:hover{filter:brightness(1.12)}
+  button:disabled{background:#2a2f3a;color:#6b7280;cursor:not-allowed;box-shadow:none}
+  button.gray{background:var(--panel2);border:1px solid var(--border-hi);color:var(--text);box-shadow:none}
+  button.gray:hover{border-color:var(--dim);filter:none}
+  .ok{color:var(--green);font-size:13px;margin-top:8px;display:none}
+  .ok.show{display:block}
+  .loading{color:var(--muted);font-size:13px;margin:18px 0 12px}
+  .loading .spin{display:inline-block;width:12px;height:12px;border:2px solid var(--accent);border-top-color:transparent;border-radius:50%;
+    animation:sp .8s linear infinite;vertical-align:-2px;margin-right:7px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .summary{color:var(--muted);font-size:12.5px;margin:14px 0 10px;background:var(--panel2);border:1px solid var(--border);
+    border-radius:10px;padding:10px 14px}
+  .summary b{color:var(--text)}
+  .note{background:var(--amber-bg);border:1px solid rgba(245,158,11,.25);border-left:3px solid var(--amber);
+    padding:12px 14px;border-radius:8px;font-size:13px;margin-top:14px;color:var(--text)}
+
+  /* ---------- model guide grid ---------- */
+  .mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-top:6px}
+  .mcard{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:13px 15px;transition:.15s}
+  .mcard:hover{border-color:var(--border-hi);transform:translateY(-1px)}
+  .mcard .mhead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px}
+  .mcard .mname{font-weight:700;font-size:13.5px}
+  .tier{font-size:10.5px;font-weight:700;padding:2.5px 8px;border-radius:999px;letter-spacing:.03em;white-space:nowrap}
+  .t-flag{background:var(--pink);color:#fff}
+  .t-strong{background:var(--accent-bg);color:var(--accent2);border:1px solid rgba(99,102,241,.35)}
+  .t-work{background:var(--green-bg);color:var(--green);border:1px solid rgba(16,185,129,.3)}
+  .t-cheap{background:var(--blue-bg);color:var(--blue);border:1px solid rgba(56,189,248,.3)}
+  .t-res{background:var(--amber-bg);color:var(--amber);border:1px solid rgba(245,158,11,.3)}
+  .mcard .mdesc{color:var(--muted);font-size:12.5px}
+
+  /* ---------- tables ---------- */
+  table.tbl{width:100%;border-collapse:collapse;font-size:13px}
+  .tbl th{text-align:left;color:var(--dim);font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;padding:8px 10px;border-bottom:1px solid var(--border)}
+  .tbl td{padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+  .tbl tr:last-child td{border-bottom:0}
+  .tbl tr:hover td{background:rgba(255,255,255,.02)}
+
+  pre.snip{background:#08090d;border:1px solid var(--border);border-radius:10px;padding:14px;overflow-x:auto;
+    font-size:12px;line-height:1.6;color:#c9d1e3;position:relative;margin-top:8px}
+  .snipbtn{position:absolute;top:8px;right:8px;background:var(--panel2);border:1px solid var(--border-hi);color:var(--muted);
+    border-radius:7px;padding:4px 10px;font-size:11px;cursor:pointer;box-shadow:none;font-weight:600}
+  .snipbtn:hover{color:var(--text);filter:none;border-color:var(--dim)}
+
+  .kbd{display:inline-block;background:var(--panel2);border:1px solid var(--border-hi);border-bottom-width:2px;border-radius:6px;
+    padding:1px 7px;font-family:var(--mono);font-size:11.5px;color:var(--text)}
+  .hint{display:flex;gap:11px;padding:11px 0;border-bottom:1px solid var(--border);font-size:13px;color:var(--muted)}
+  .hint:last-child{border-bottom:0}
+  .hint .h-ico{flex-shrink:0;font-size:16px;line-height:1.4}
+  .hint b{color:var(--text)}
+  footer{margin-top:36px;color:var(--dim);font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="logo">⚡</div>
+    <div>
+      <h1>opencode.json — генератор настроек</h1>
+      <div class="sub">Bifrost LiteLLM · <code>https://hcbifrost.herocraft.com/litellm/v1</code></div>
+    </div>
+  </header>
+
+  <div style="margin-top:14px"><span class="badge" id="user">—</span></div>
+  <div class="loading" id="loading"><span class="spin"></span>Загружаю список моделей пользователя…</div>
+  <div class="summary" id="summary" style="display:none"></div>
+  <textarea id="cfg" readonly spellcheck="false" style="display:none"></textarea>
+  <div class="btns" style="display:none" id="btns">
+    <button id="btnCopy" onclick="copy()">📋 Скопировать</button>
+    <button class="gray" id="btnDl" onclick="dl()">⬇ Скачать .txt</button>
+  </div>
+  <div class="ok" id="ok">Скопировано ✓</div>
+  <div class="note" id="noteFallback" style="display:none"></div>
+
+  <!-- ==================== КАК ПРИМЕНИТЬ ==================== -->
+  <div class="card">
+    <h2><span class="ico">🚀</span>Как применить настройки</h2>
+    <details open>
+      <summary>Способ 1 — через агента (opencode / Hermes / другой) — рекомендуется</summary>
+      <div class="inner">
+        <ol>
+          <li>Скопируй текст выше и <b>вставь его агенту как сообщение</b> — промпт в начале текста уже объясняет, что делать (обновить провайдер, использовать имеющийся ключ или запросить у тебя).</li>
+          <li>Перезапусти агента — opencode читает конфиг только при старте.</li>
+          <li>Готово: модели появятся в переключателе (в opencode — <span class="kbd">Tab</span> или <span class="kbd">/models</span>).</li>
+        </ol>
+      </div>
+    </details>
+    <details>
+      <summary>Способ 2 — вручную</summary>
+      <div class="inner">
+        <ol>
+          <li>Скачай файл кнопкой выше или скопируй JSON (без первой строки-промпта).</li>
+          <li>Сохрани как <code>~/.config/opencode/opencode.json</code> (глобально) или <code>opencode.json</code> в корне проекта.</li>
+          <li>Ключ передаётся через переменную окружения <code>LITELLM_API_KEY</code> — экспортируй её или впиши ключ прямо вместо <code>{env:LITELLM_API_KEY}</code>.</li>
+          <li>Перезапусти opencode.</li>
+        </ol>
+      </div>
+    </details>
+    <details>
+      <summary>Способ 3 — агенты с динамической подгрузкой (Hermes и подобные)</summary>
+      <div class="inner">
+        <ol>
+          <li>Открой <b>Настройки → Model → Custom endpoint → Set up custom endpoint</b>.</li>
+          <li><b>Base URL</b>: <code>https://hcbifrost.herocraft.com/litellm/v1</code></li>
+          <li><b>API Key</b>: твой virtual key (<code>sk-…</code>).</li>
+          <li><b>Connect</b> — список моделей подтянется автоматически.</li>
+        </ol>
+      </div>
+    </details>
+  </div>
+
+  <!-- ==================== ПОДСКАЗКИ ==================== -->
+  <div class="card">
+    <h2><span class="ico">💡</span>Подсказки по работе</h2>
+    <div class="hint"><span class="h-ico">⌨️</span><div><b>Переключение моделей</b> — в opencode: <span class="kbd">Tab</span> циклит модели, <span class="kbd">/models</span> открывает полный список с поиском. Модель можно менять на ходу, контекст сохраняется.</div></div>
+    <div class="hint"><span class="h-ico">🧠</span><div><b>Thinking-варианты</b> — у reasoning-моделей есть варианты <code>low / high / max</code>: тот же переключатель моделей циклит их. <code>low</code> — быстро и дёшево для простых правок, <code>high/max</code> — глубже думает (и дороже, до 2× reasoning-токенов). Для рутины бери <code>low</code> или не-reasoning модель.</div></div>
+    <div class="hint"><span class="h-ico">📎</span><div><b>Картинки и файлы</b> — модели с vision принимают изображения как вложения (скриншоты, диаграммы). Просто прикрепи файл к сообщению.</div></div>
+    <div class="hint"><span class="h-ico">💰</span><div><b>Цена</b> — флагманы (GLM-5.3, Kimi K3, qwen3.8-max) в <b>10–30 раз дороже</b> дешёвых моделей. 80% повседневных задач решают рабочие лошадки (см. гайд ниже). Не оставляй флагман включённым «по инерции».</div></div>
+    <div class="hint"><span class="h-ico">🔄</span><div><b>Обновляй конфиг</b> — состав моделей и лимиты периодически меняются. Если модель исчезла или появилась ошибка «Invalid model name» — зайди на эту страницу снова и перегенерируй конфиг.</div></div>
+    <div class="hint"><span class="h-ico">🧹</span><div><b>Компакция</b> — в конфиге включён <code>prune</code>: при сжатии истории opencode выкидывает устаревшие куски, а не суммаризует всё подряд. Помогает на длинных сессиях.</div></div>
+    <div class="hint"><span class="h-ico">🔌</span><div><b>MCP-серверы</b> — если указаны в summary выше, они подключаются автоматически; LiteLLM сам фильтрует tools по правам твоего ключа.</div></div>
+    <div class="hint"><span class="h-ico">⏱️</span><div><b>Не опрашивай MCP-серверы чаще раза в 15 минут</b> — лишние запросы создают нагрузку на шлюз и мусор в логах. Для периодических проверок ставь интервал <b>≥ 15 минут</b>; списки моделей/инструментов кэшируются агентом и не меняются чаще.</div></div>
+    <div class="hint"><span class="h-ico">🖼️</span><div><b>Картинки лучше обрабатывать субагентами</b> — не грузи изображения в основной тред: делегируй анализ скриншотов/диаграмм субагенту (Task tool). Основной агент не засоряется визуальным контекстом, экономит токены, а субагент с vision-моделью вернёт готовое текстовое заключение.</div></div>
+  </div>
+
+  <!-- ==================== ГАЙД ПО МОДЕЛЯМ ==================== -->
+  <div class="card">
+    <h2><span class="ico">🧭</span>Какую модель выбрать</h2>
+    <p style="margin-bottom:10px">Актуальный модельный ряд (сентябрь 2026). Жирные — рекомендованные точки входа.</p>
+    <div class="mgrid">
+      <div class="mcard"><div class="mhead"><span class="mname">qwen3.8-max</span><span class="tier t-flag">флагман</span></div>
+        <div class="mdesc">Самая дорогая модель — и самая умная. Плюс миллион токенов контекста: весь проект разом, гигантские файлы, длинные логи.</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">Kimi K3</span><span class="tier t-flag">флагман №2</span></div>
+        <div class="mdesc">Второй флагман, тоже дорого. Смотрит на задачи под другим углом, чем qwen — отлично для ревью кода и разбора сложных мест.</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">GLM-5.3</span><span class="tier t-strong">продвинутый инженер</span></div>
+        <div class="mdesc">Решает сложные задачи — архитектура, коварные баги, планирование, — но до флагманов не дотягивает. Заметно дешевле их.</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">MiniMax-M3</span><span class="tier t-work">рабочая лошадка</span></div>
+        <div class="mdesc">Рабочая лошадка для написания кода: девопс, повседневные задачи, багфиксы. Начинай с неё — покрывает большую часть работы.</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">xiaomi/mimo-v2.6-pro</span><span class="tier t-work">цена/качество</span></div>
+        <div class="mdesc">Лучшее соотношение цена/качество, но чуть глупее GLM-5.3. Так же хорошо справляется со сложным кодом и заковыристыми ошибками.</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">stepfun/step-5-preview</span><span class="tier t-work">рабочая лошадка</span></div>
+        <div class="mdesc">Ещё одна рабочая лошадка. Свежая превью-модель StepFun с vision — агенты и мультимодальность. Пробуй, делись впечатлениями.</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">tencent/Hy4</span><span class="tier t-res">резервный флагман</span></div>
+        <div class="mdesc">Резервный флагман — когда основные закончились (лимиты/квоты). По возможностям близок к ним.</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">deepseek-v4-pro</span><span class="tier t-strong">сильная инженерная</span></div>
+        <div class="mdesc">Сильная модель для сложного кода — дешёвая альтернатива GLM-5.3, когда нужен «второй взгляд» без флагманских цен.</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">qwen3.7-max</span><span class="tier t-strong">прежний флагман</span></div>
+        <div class="mdesc">Предыдущий флагман qwen — всё ещё очень умная, при этом максимально дешёвая в своём классе.</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">Kimi K2.8</span><span class="tier t-work">бюджетный Kimi</span></div>
+        <div class="mdesc">Повседневная версия Kimi: ревью, правки, аккуратные задачи — без ценника K3.</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">GLM-5.3-Flash</span><span class="tier t-cheap">быстрая+дешёвая</span></div>
+        <div class="mdesc">Быстрая версия GLM: повседневный код, правки, быстрые ответы. Дешёвая альтернатива GLM-5.3 в большинстве случаев.</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">qwen3.8-flash</span><span class="tier t-strong">обрезанный флагман</span></div>
+        <div class="mdesc">Заметно умнее и дороже MiniMax-M3: чуть-чуть обрезанный флагман, но всё ещё достаточно дорогая.</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">stepfun/step-3.7-flash</span><span class="tier t-cheap">дешёвая · vision</span></div>
+        <div class="mdesc">Недорогая stepfun с поддержкой картинок — скриншоты и диаграммы за копейки.</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">deepseek-v4.1-flash</span><span class="tier t-cheap">средняя</span></div>
+        <div class="mdesc">Средняя по разумности: чуть дороже mimo-v2.6-pro и чуть медленнее.</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">xiaomi/mimo-v2.6-flash</span><span class="tier t-cheap">документация</span></div>
+        <div class="mdesc">Лучший выбор для текстов, доков и README. Максимально дешёвая, при этом ничего не забывает.</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">tencent/Kimi K3 (reserved)</span><span class="tier t-res">резерв</span></div>
+        <div class="mdesc">Резервная копия Kimi K3 на tencent-плане — когда основной K3 недоступен.</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">tencent/Hy3</span><span class="tier t-res">младший резерв</span></div>
+        <div class="mdesc">Младший брат Hy4 — дешевле, для случаев «флагман нужен, но не максимально умный».</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">MiniMax-M2.7</span><span class="tier t-cheap">простая</span></div>
+        <div class="mdesc">Простые механические задачи: закоммитить, проверить синтаксис, переформатировать.</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">highspeed</span><span class="tier t-cheap">ускоренные</span></div>
+        <div class="mdesc">MiniMax-M2.x-highspeed — те же модели, но со значительно более быстрым инференсом.</div></div>
+    </div>
+    <p style="margin-top:12px;font-size:12.5px">Рекомендация: <b>MiniMax-M3</b> по умолчанию → <b>GLM-5.3</b> для сложного → флагманы (<b>qwen3.8-max</b> / <b>Kimi K3</b>) — когда задача того стоит.</p>
+  </div>
+
+  <!-- ==================== КАРТИНКИ ==================== -->
+  <div class="card">
+    <h2><span class="ico">🎨</span>Генерация картинок</h2>
+    <p>Модели перечислены в summary выше. Эндпоинты: <code>/v1/images/generations</code> (text-to-image) и <code>/v1/images/edits</code> (image-to-image, для моделей с пометкой).</p>
+    <p style="margin-top:8px"><b>Лимиты</b>: обычные пользователи — <b>25 картинок/день</b>, команда <b>All Access</b> — <b>50/день</b> (per user × model, общий для generation и editing). Размер по умолчанию <code>1024x1024</code>, переопределяется параметром <code>size</code>.</p>
+    <details><summary>Пример curl</summary>
+      <div class="inner">
+<pre class="snip">curl -X POST https://hcbifrost.herocraft.com/litellm/v1/images/generations \
+  -H "Authorization: Bearer $LITELLM_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gpt-image-2", "prompt": "A cozy cabin in snowy forest", "size": "1024x1024"}'</pre>
+      </div>
+    </details>
+  </div>
+
+  <!-- ==================== MINIMAX MEDIA ==================== -->
+  <div class="card">
+    <h2><span class="ico">🎙️</span>MiniMax Media API — речь, видео, картинки</h2>
+    <p>Не chat-модели — вызываются напрямую через passthrough-роуты (авторизация: твой Litellm API key, как у chat). Base: <code>https://hcbifrost.herocraft.com/litellm</code></p>
+    <table class="tbl" style="margin-top:10px">
+      <tr><th>Модель</th><th>Тип</th><th>Роут (POST, если не указано)</th></tr>
+      <tr><td><b>speech-2.8-hd</b></td><td>TTS (40 языков, эмоции, теги)</td><td><code>/minimax/v1/t2a_v2</code></td></tr>
+      <tr><td>voice clone</td><td>Клонирование голоса</td><td><code>/minimax/v1/voice_clone</code></td></tr>
+      <tr><td><b>image-01</b></td><td>Картинки (t2i / i2i)</td><td><code>/minimax/v1/image_generation</code></td></tr>
+      <tr><td><b>MiniMax-H3 / H3-Max</b></td><td>Видео 768P/2K, 4–15с</td><td><code>/minimax/v2/video_generation</code></td></tr>
+      <tr><td>video tasks</td><td>Статус задач</td><td><code>/minimax/v2/query/video_generation</code> (GET)</td></tr>
+    </table>
+    <details><summary>Пример: синтез речи (speech-2.8-hd)</summary>
+      <div class="inner">
+        Аудио вернётся hex-строкой в <code>data.audio</code> → декодируй в MP3. Голоса: <code>platform.minimax.io/docs/faq/system-voice-id</code>. В тексте поддерживаются паузы <code>&lt;#1.5#&gt;</code> и интеръекции <code>(sighs)</code>, <code>(laughs)</code>.
+<pre class="snip">curl -X POST https://hcbifrost.herocraft.com/litellm/minimax/v1/t2a_v2 \
+  -H "Authorization: Bearer $LITELLM_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "speech-2.8-hd",
+    "text": "Привет! (chuckle) Это проверка синтеза.",
+    "stream": false,
+    "voice_setting": {"voice_id": "female-shaonv", "speed": 1.0, "vol": 0.8, "pitch": 0},
+    "audio_setting": {"format": "mp3", "sample_rate": 32000}
+  }'
+# hex -> mp3: python3 -c "print(open('out.json'))..." или xxd -r -p</pre>
+      </div>
+    </details>
+    <details><summary>Пример: видео (MiniMax-H3, async)</summary>
+      <div class="inner">
+        Submit возвращает <code>task_id</code> → полли GET-запросом, пока <code>status</code> не станет <code>Success</code> (в ответе — ссылка на файл).
+<pre class="snip"># 1. submit
+curl -X POST https://hcbifrost.herocraft.com/litellm/minimax/v2/video_generation \
+  -H "Authorization: Bearer $LITELLM_API_KEY" -H "Content-Type: application/json" \
+  -d '{"model": "MiniMax-H3", "content": [{"type": "text", "text": "A drone shot over neon city, 768p"}]}'
+# 2. poll (GET, принимает task_id параметром)
+curl "https://hcbifrost.herocraft.com/litellm/minimax/v2/query/video_generation?task_id=TASK_ID" \
+  -H "Authorization: Bearer $LITELLM_API_KEY"</pre>
+      </div>
+    </details>
+  </div>
+
+  <!-- ==================== ТРАБЛШУТИНГ ==================== -->
+  <div class="card">
+    <h2><span class="ico">🛠️</span>Если что-то не работает</h2>
+    <table class="tbl">
+      <tr><th>Симптом</th><th>Что делать</th></tr>
+      <tr><td><code>401 Authentication</code></td><td>Неверный ключ: проверь переменную <code>LITELLM_API_KEY</code> / введённый VK.</td></tr>
+      <tr><td><code>403</code> / «Invalid model name»</td><td>Модели нет в твоих правах или конфиг устарел — перегенерируй его на этой странице.</td></tr>
+      <tr><td><code>429</code></td><td>Лимиты запросов/дня — подожди или смени модель (например, на (res)-версию).</td></tr>
+      <tr><td>Компакция падает с <code>413</code></td><td>Слишком много тяжёлых вложений в контексте — убери часть картинок из истории.</td></tr>
+      <tr><td>Модель «думает» слишком долго</td><td>Переключись на вариант <code>low</code> или на не-reasoning модель (MiniMax-M3, mimo).</td></tr>
+    </table>
+  </div>
+
+  <footer>Bifrost LiteLLM · Setup · обновлено 27.09.2026 · вопросы — в общую команду</footer>
+</div>
+
+<script>
+var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var VK_PREFIX_RE = /^(sk-|hkg-)/;
+var VK_HASH_RE = /^[0-9a-f]{64}$/i;
+var p = new URLSearchParams(location.search);
+var u = p.get("user") || p.get("user_id") || "";
+var vk = p.get("vk") || "";
+var vkh = p.get("vkh") || "";
+var uValid = u && UUID_RE.test(u);
+if(u){
+  document.getElementById("user").textContent = uValid ? "user: " + u : "user: " + u + " (invalid: not a UUID — passing as-is)";
+}
+if(vk && !VK_PREFIX_RE.test(vk)){
+  vk = "";
+}
+if(vkh && !VK_HASH_RE.test(vkh)){
+  vkh = "";
+}
+if(vk || vkh){
+  var userEl = document.getElementById("user");
+  userEl.textContent = "resolving virtual key…";
+}
+
+var BASE_URL = "https://hcbifrost.herocraft.com/litellm/v1";
+var FALLBACK_MODELS = [
+  "MiniMax-M3","MiniMax-M2.7",
+  "GLM-5.3","GLM-5.3-Flash","GLM-5.3 (res)",
+  "qwen3.8-max","qwen3.8-flash","qwen3.7-plus",
+  "Kimi K3","Kimi K2.8",
+  "deepseek-v4-pro","openrouter/deepseek-v4.1-flash",
+  "xiaomi/mimo-v2.6-flash"
+];
+
+var userUid = u;  // resolved UUID, set by resolveUid() when ?vk= is present
+var vkAlias = ""; // resolved VK alias, used only for display
+var vkEmail = ""; // resolved VK owner's email (for display)
+var vkKeyName = ""; // resolved VK key_name (LiteLLM "sk-...W4yI")
+var vkTeamAlias = ""; // resolved VK's team alias (e.g. "Agents")
+var vkKeyModelsMeaning = ""; // "explicit-whitelist" / "all-team-models" / "inherited"
+var vkHasExplicitWhitelist = false; // true if VK has REAL per-key models whitelist
+var activeVkParam = vk || vkh; // whichever one is set, passed back in API calls
+
+function buildCfg(modelList, mcpServers) {
+  var models = {};
+  (modelList || []).forEach(function(m){
+    var entry = {
+      name: m.id,
+      limit: { context: m.context || 0, output: m.output || 0 }
+    };
+    if (m.variants) {
+      // Newer opencode-style: cycle variants keybind (low/high/max).
+      // Per docs /docs/models, this needs `options.reasoningEffort` for the default
+      // and `variants` for cycle-menu. Avoid `options.thinking` (Anthropic-style
+      // budget) for OpenAI-compatible providers like Kimi K3 / K3-256K.
+      entry.options = { reasoningEffort: "high" };
+      entry.variants = m.variants;
+    } else if (m.reasoning) {
+      // Anthropic-style thinking budget toggle (GLM / Qwen / Kimi K2.x etc.).
+      entry.options = { thinking: { type: "enabled" } };
+    }
+    var inputMods = ["text"];
+    if (m.vision) inputMods.push("image");
+    if (m.video)  inputMods.push("video");
+    if (m.audio)  inputMods.push("audio");
+    var hasModalities = inputMods.length > 1;
+    if (m.image) {
+      entry.modalities = Object.assign(
+        hasModalities ? { input: inputMods } : {},
+        { output: ["image"] }
+      );
+      hasModalities = true;
+    } else if (hasModalities) {
+      entry.modalities = { input: inputMods };
+    }
+    if (hasModalities) {
+      entry.attachment = true;
+    }
+    models[m.id] = entry;
+  });
+  var cfg = {
+    "$schema": "https://opencode.ai/config.json",
+    "compaction": {
+      "prune": true
+    },
+    "provider": {
+      "bifrost-litellm": {
+        "npm": "@ai-sdk/openai-compatible",
+        "name": "Bifrost LiteLLM",
+        "options": {
+          "baseURL": BASE_URL,
+          "apiKey": "{env:LITELLM_API_KEY}"
+        },
+        "models": models
+      }
+    }
+  };
+  // MCP секция — только если есть доступные серверы.
+  // Каждый сервер указывает на LiteLLM proxy через URL namespacing
+  // (https://.../{server}/mcp). opencode клиент подключается через
+  // Authorization: Bearer header, LiteLLM сам фильтрует по permissions ключа.
+  if (mcpServers && mcpServers.length > 0) {
+    cfg.mcp = {};
+    mcpServers.forEach(function(s){
+      cfg.mcp[s.name] = {
+        "type": "remote",
+        "url": s.url,
+        "enabled": true,
+        "headers": {
+          "Authorization": "Bearer {env:LITELLM_API_KEY}"
+        }
+      };
+    });
+  }
+  return cfg;
+}
+
+var AGENT_PROMPT = "добавь или обнови настройки для провайдера агента, который я прямо сейчас использую (opencode, hermes или другой), если в текущих настройках имеется ключ, используй его. если ключа нет, запроси его у пользователя\n\n";
+
+var lastImageEditList = [];
+var txt = "";
+function renderCfg(cfg, note) {
+  var jsonBody = JSON.stringify(cfg, null, 2);
+  txt = AGENT_PROMPT + jsonBody;
+  document.getElementById("cfg").value = txt;
+  document.getElementById("cfg").style.display = "block";
+  document.getElementById("btns").style.display = "flex";
+  if (note) {
+    var n = document.getElementById("noteFallback");
+    n.textContent = note;
+    n.className = "note";
+    n.style.display = "block";
+  }
+  var models = cfg.provider["bifrost-litellm"].models;
+  var ids = Object.keys(models);
+  var mcpNames = cfg.mcp ? Object.keys(cfg.mcp) : [];
+  var imageModels = ids.filter(function(id){ return models[id].modalities && models[id].modalities.output && models[id].modalities.output.indexOf("image") >= 0; });
+  var imageEditModels = (lastImageEditList || []).filter(function(id){ return ids.indexOf(id) >= 0; });
+  var summary = "<b>" + ids.length + "</b> моделей доступно пользователю · модель выбирается вручную в opencode (/models)";
+  if (imageModels.length) {
+    summary += " · 🎨 <b>" + imageModels.length + "</b> для генерации картинок";
+    if (imageEditModels.length) {
+      summary += " (<b>" + imageEditModels.length + "</b> также поддерживают <b>image-to-image</b>: <code>" + imageEditModels.join(", ") + "</code>)";
+    }
+  }
+  if (mcpNames.length) {
+    summary += " · <b>" + mcpNames.length + "</b> MCP-сервер(ов): <code>" + mcpNames.join(", ") + "</code>";
+  } else {
+    summary += " · MCP-серверы не настроены";
+  }
+  document.getElementById("summary").innerHTML = summary;
+  document.getElementById("summary").style.display = "block";
+  document.getElementById("loading").style.display = "none";
+}
+
+function fallback() {
+  renderCfg(buildCfg(FALLBACK_MODELS, []), "⚠ Не удалось получить список моделей из LiteLLM — показан список по умолчанию.");
+}
+
+function resolveUid(){
+  // When ?vk= or ?vkh= is supplied, look up the owning user_id via /vk-info
+  // and patch userUid / uValid. Returns a Promise that resolves to userUid
+  // or rejects with a human-readable error.
+  if(!activeVkParam){
+    return uValid ? Promise.resolve(userUid)
+      : Promise.reject(new Error(
+          "Invalid user parameter: \"" + userUid + "\" is not a UUID. " +
+          "Use the OpenCode button on the Users or Virtual Keys page, " +
+          "or paste your user_id (UUID) directly. " +
+          "API keys / virtual keys (sk-...) are NOT user_ids."
+        ));
+  }
+  var infoUrl = "/setup-opencode/api/vk-info?"
+    + (vkh ? "vkh=" + encodeURIComponent(vkh)
+           : "vk="  + encodeURIComponent(vk));
+  return fetch(infoUrl, { headers: { "Accept": "application/json" } })
+    .then(function(r){
+      if (!r.ok) throw new Error("vk-info HTTP " + r.status);
+      return r.json();
+    })
+    .then(function(info){
+      if(!info || !info.user_id || !UUID_RE.test(info.user_id)){
+        throw new Error("virtual key has no user_id (team-scoped key?)");
+      }
+      userUid = info.user_id;
+      vkAlias = info.key_alias || "";
+      vkEmail = info.user_email || "";
+      vkKeyName = info.key_name || "";
+      vkTeamAlias = info.team_alias || "";
+      vkKeyModelsMeaning = info.key_models_meaning || "";
+      vkHasExplicitWhitelist = Array.isArray(info.key_models) &&
+        info.key_models.length > 0 &&
+        info.key_models[0] !== "all-team-models";
+      uValid = true;
+      var userEl = document.getElementById("user");
+      var label = "user: " + userUid;
+      if(vkEmail) label += "  (" + vkEmail + ")";
+      if(vkAlias) label += "  ·  vk alias: " + vkAlias;
+      if(vkTeamAlias) label += "  ·  team: " + vkTeamAlias;
+      userEl.textContent = label;
+      return userUid;
+    });
+}
+
+function fetchModelsPromise() {
+  return resolveUid().then(function(uid){
+    var url = "/setup-opencode/api/models?user=" + encodeURIComponent(uid);
+    if(vk)  url += "&vk="  + encodeURIComponent(vk);
+    if(vkh) url += "&vkh=" + encodeURIComponent(vkh);
+    return fetch(url, { headers: { "Accept": "application/json" } });
+  })
+    .then(function(r){
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    })
+    .then(function(d){
+      // d.models is the array; d.vk_key_models (only set for VK requests)
+      // exposes the per-key whitelist so we can show a "VK restricted" hint.
+      var arr = (d && Array.isArray(d.models)) ? d.models : [];
+      _lastModelsResponse = d || {};
+      if (!arr.length) return [];
+      if (typeof arr[0] === "string") return arr.map(function(id){ return {id:id, context:0, output:0}; });
+      return arr;
+    });
+}
+
+var _lastModelsResponse = {};
+
+function fetchMcpPromise() {
+  return resolveUid().then(function(uid){
+    var url = "/setup-opencode/api/mcp?user=" + encodeURIComponent(uid);
+    if(vk)  url += "&vk="  + encodeURIComponent(vk);
+    if(vkh) url += "&vkh=" + encodeURIComponent(vkh);
+    return fetch(url, { headers: { "Accept": "application/json" } });
+  })
+    .then(function(r){
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    })
+    .then(function(d){
+      return (d && Array.isArray(d.servers)) ? d.servers : [];
+    });
+}
+
+function fetchAll() {
+  Promise.allSettled([fetchModelsPromise(), fetchMcpPromise()]).then(function(results){
+    var models = results[0].status === "fulfilled" ? results[0].value : FALLBACK_MODELS.map(function(id){ return {id:id, context:0, output:0}; });
+    var mcpServers = results[1].status === "fulfilled" ? results[1].value : [];
+    lastImageEditList = models.filter(function(m){ return m.image_edit; }).map(function(m){ return m.id; });
+    var note = null;
+    if (results[0].status === "rejected") {
+      note = "⚠ Не удалось получить список моделей из LiteLLM — показан список по умолчанию. (" + (results[0].reason && results[0].reason.message) + ")";
+    } else if (!models.length) {
+      note = "⚠ Для этого пользователя в LiteLLM не настроено ни одной модели.";
+    } else if (vkHasExplicitWhitelist && Array.isArray(_lastModelsResponse.vk_key_models)) {
+      // VK has a real per-key whitelist (NOT the 'all-team-models' sentinel)
+      // → the list shown is restricted to those models.
+      var wl = _lastModelsResponse.vk_key_models;
+      note = "🔒 Этот виртуальный ключ ограничен whitelist'ом из " + wl.length
+        + " модел" + (wl.length === 1 ? "и" : "ей") + "."
+        + (vkAlias ? " (vk alias: " + vkAlias + ")" : "")
+        + " Персональные модели владельца НЕ применяются.";
+    } else if (_lastModelsResponse.resolution_mode === "team-only" && vkTeamAlias) {
+      // Team-scoped key with no per-user personal models in scope.
+      note = "👥 Ключ принадлежит команде «" + vkTeamAlias
+        + "» — список моделей = team.models (без персональных моделей владельца).";
+    }
+    renderCfg(buildCfg(models, mcpServers), note);
+  });
+}
+
+fetchAll();
+
+function copy(){
+  navigator.clipboard.writeText(txt).then(function(){
+    var e=document.getElementById("ok");e.classList.add("show");
+    setTimeout(function(){e.classList.remove("show")},1500);
+  }).catch(function(){
+    var t=document.getElementById("cfg");t.select();document.execCommand("copy");
+  });
+}
+
+function dl(){
+  var s=String(u).replace(/[^a-zA-Z0-9_-]/g,"_");
+  var b=new Blob([txt],{type:"text/plain;charset=utf-8"});
+  var url=URL.createObjectURL(b);
+  var a=document.createElement("a");
+  a.href=url;a.download="opencode-"+s+".txt";
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+</script>
+
+</body>
+</html>
