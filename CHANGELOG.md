@@ -4,6 +4,27 @@
 
 ---
 
+### [2026-09-28] — модель `MiniMax-M3.1-Flash-Preview`
+
+Новый preview от MiniMax (релиз 27.09, ultra-fast текстовая модель для
+повседневной разработки). Деплоймент через `/model/new` — копия params
+MiniMax-M3 (custom_openai + креды `Minimax`, thinking enabled,
+1M ctx / 131k out); цены скопированы с M3 ($0.30/МТок in, $1.20/МТок out)
+как плейсхолдер — официальный прайсинг preview ещё не опубликован.
+Грант: всем 12 командам (как остальные chat-модели). Карточка добавлена
+в «Какую модель выбрать» на setup-странице.
+
+**Верификация**: chat/completions через VK → 200, модель отвечает и
+идентифицирует себя. Видимость через `/models` унаследована от team
+grants.
+
+**Заодно перепроверено** (квоты Token Plan сбросились с релизом M3.1):
+MiniMax-H3 видео — всё ещё 402 «tier does not support», voice_clone —
+всё ещё 2061 «not support model». v2-видео требует `duration`,
+`resolution`, `ratio` (t2v) — учтено при будущем включении.
+
+---
+
 ### [2026-09-28] — MCP `media`: тул `register_voice_clone` (MiniMax persistent clone)
 
 Добавлен тул `register_voice_clone` — persistent-клонирование голоса
