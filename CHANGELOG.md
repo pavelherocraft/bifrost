@@ -4,6 +4,17 @@
 
 ---
 
+### [2026-09-28] — fix: восстановлены zai_* MCP-гранты команд
+
+При выдаче `media` грант перезаписал `object_permission.mcp_servers`
+у 11 команд, стёр UUID'ы zai-серверов — zai_* пропали из настроек
+opencode у всех, кроме Analytics (их грант не трогали). Восстановлено:
+`mcp_servers = {media, zai_web_search, zai_web_reader, zai_zread}` —
+по именам (стабильны, UUID-хеши меняются при правках `mcp_servers`-блока).
+Проверено `/mcp?user=`: Coders видит 4 сервера, Analytics — только zai_*.
+
+---
+
 ### [2026-09-28] — MCP `media`: обогащённые схемы тулов + карточка на setup-странице
 
 **Схемы тулов** (`/opt/media-mcp/server.py`): все параметры переведены на
