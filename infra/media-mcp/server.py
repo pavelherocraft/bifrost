@@ -29,6 +29,10 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 LITELLM = "http://127.0.0.1:4001"
+# LiteLLM managed routes claim /minimax/* and /mmx/* before generic
+# passthrough — files/retrieve is called directly with the PAYG key.
+MINIMAX_API = "https://api.minimax.io"
+MINIMAX_KEY = os.environ.get("MINIMAX_PAYG_KEY", "")
 PUBLIC_BASE = "https://hcbifrost.herocraft.com"
 FILES_DIR = "/opt/media-mcp/files"
 UPLOADS_DIR = os.path.join(FILES_DIR, "uploads")
@@ -60,13 +64,15 @@ IMAGE_EDIT_MODELS = {
     "minimax/image-01": "MiniMax i2i via subject_reference (character/style)",
 }
 VIDEO_MODELS = {
-    "MiniMax-Hailuo-2.3": "newest, best quality (default)",
-    "MiniMax-Hailuo-02": "previous generation",
-    "T2V-01": "legacy text-to-video",
+    "MiniMax-H3": "newest H3 (v2 API, up to 2K, first/last frame + reference inputs, PAYG billing)",
+    "MiniMax-Hailuo-2.3": "v1 flagship, good quality (TokenPlan)",
+    "MiniMax-Hailuo-02": "v1 previous generation",
+    "T2V-01": "v1 legacy text-to-video",
 }
+VIDEO_V2_MODELS = {"MiniMax-H3", "MiniMax-H3-Max"}
 VOICE_CLONE_MODELS = {
-    "voice/xiaomi/mimo-v2.5-tts-voiceclone": "zero-shot clone: sample passed inline with each request (clone_speech) — WORKING",
-    "minimax/speech-2.8-hd (persistent clone)": "register_voice_clone + synthesize_speech(voice=<voice_id>) — NOT available: MiniMax TokenPlan rejects voice_clone (upgrade plan to enable)",
+    "voice/xiaomi/mimo-v2.5-tts-voiceclone": "zero-shot clone: sample passed inline with each request (clone_speech)",
+    "minimax/speech-2.8-hd (persistent clone)": "register_voice_clone creates a reusable voice_id -> synthesize_speech(model='minimax/speech-2.8-hd', voice=<voice_id>)",
 }
 TTS_MODELS = {
     "voice/xiaomi/mimo-v2.5-tts": "preset mimo voices + style instructions; singing via (唱歌) tag in text",
@@ -178,7 +184,9 @@ def list_media_models() -> dict:
         "minimax_voices": MINIMAX_VOICES,
         "audio_formats": ["wav", "mp3"],
         "video_durations_s": [5, 6, 10],
-        "video_resolutions": ["768P", "1080P"],
+        "video_resolutions": ["768P", "1080P", "2K (MiniMax-H3 only)"],
+        "video_ratios": ["16:9", "4:3", "1:1", "3:4", "9:16", "21:9",
+                         "adaptive (i2v only)"],
         "notes": [
             "ALL tools return hosted URLs (files live 24h) — never base64 in context",
             "input audio for clone/ASR: http(s) URL | data-URI | base64 | 'upload:<name>'",
@@ -187,7 +195,8 @@ def list_media_models() -> dict:
             "edit_image modifies an existing image (i2i); its output URL can feed generate_video.first_frame_url too",
             "style param = natural-language voice/tone instruction (emotion, pace, accent); audio tags like (laughs)/(sighs) go inside the text",
             "voiceclone sample: wav/mp3, <=10MB, clean speech a few seconds long",
-            "two clone modes: xiaomi zero-shot (clone_speech, per-request, WORKING) vs minimax persistent voice_id (register_voice_clone — blocked by current MiniMax TokenPlan)",
+            "two clone modes: xiaomi zero-shot (clone_speech, per-request) vs minimax persistent voice_id (register_voice_clone once -> reuse in synthesize_speech)",
+            "MiniMax-H3 video also supports last_frame_url and reference media (see tool params); H3/H3-Max and voice_clone bill to the MiniMax PAYG account",
             "voicedesign: voice comes purely from `style` description; voice param not supported",
         ],
     }
@@ -293,20 +302,42 @@ async def edit_image(
 async def generate_video(
     ctx: Context,
     prompt: Annotated[str, Field(description="Scene description: subject, motion, camera")],
-    model: Annotated[str, Field(description="Video model — see list_media_models().video_models")] = "MiniMax-Hailuo-2.3",
-    duration_s: Annotated[Optional[int], Field(description="Clip length in seconds (5-10 typical); omit for provider default")] = None,
-    resolution: Annotated[str, Field(description="768P (default) or 1080P")] = "768P",
-    first_frame_url: Annotated[Optional[str], Field(description="Optional image URL (e.g. from generate_image) -> image-to-video")] = None,
+    model: Annotated[str, Field(description="Video model — see list_media_models().video_models. MiniMax-H3 = newest v2 (up to 2K, first+last frame, reference media); Hailuo-2.3/02, T2V-01 = v1")] = "MiniMax-H3",
+    duration_s: Annotated[Optional[int], Field(description="Clip length in seconds (H3: 5-10; v1: 5-10); omit for provider default")] = None,
+    resolution: Annotated[str, Field(description="768P (default) | 1080P | 2K (H3 only)")] = "768P",
+    ratio: Annotated[Optional[str], Field(description="Aspect ratio 16:9|4:3|1:1|3:4|9:16|21:9 — REQUIRED for H3 text-to-video; 'adaptive' allowed when a frame image is given")] = None,
+    first_frame_url: Annotated[Optional[str], Field(description="Optional image URL (e.g. from generate_image/edit_image) -> image-to-video first frame")] = None,
+    last_frame_url: Annotated[Optional[str], Field(description="H3 only: image URL for the last frame (first+last frame mode)")] = None,
 ) -> dict:
     """Submit an async video generation job (MiniMax). Returns {task_id} —
-    generation takes minutes; poll video_status(task_id) until status=Success."""
+    generation takes minutes; poll video_status(task_id) until status=Success.
+    H3 models use the v2 multimodal API; others use v1."""
     vk = _vk(ctx)
-    body = {"model": model, "prompt": prompt, "resolution": resolution}
-    if duration_s:
-        body["duration"] = duration_s
-    if first_frame_url:
-        body["first_frame_image"] = first_frame_url
-    r = await _llm(vk, "POST", "/minimax/v1/video_generation", timeout=90, json=body)
+    if model in VIDEO_V2_MODELS:
+        content = [{"type": "text", "text": prompt}]
+        if first_frame_url:
+            content.append({"type": "image_url",
+                            "image_url": {"url": first_frame_url},
+                            "role": "first_frame"})
+        if last_frame_url:
+            content.append({"type": "image_url",
+                            "image_url": {"url": last_frame_url},
+                            "role": "last_frame"})
+        has_frame = bool(first_frame_url or last_frame_url)
+        body = {"model": model, "content": content,
+                "resolution": resolution,
+                "duration": duration_s or 5,
+                "ratio": ratio or ("adaptive" if has_frame else "16:9")}
+        r = await _llm(vk, "POST", "/minimax/v2/video_generation",
+                       timeout=90, json=body)
+    else:
+        body = {"model": model, "prompt": prompt, "resolution": resolution}
+        if duration_s:
+            body["duration"] = duration_s
+        if first_frame_url:
+            body["first_frame_image"] = first_frame_url
+        r = await _llm(vk, "POST", "/minimax/v1/video_generation",
+                       timeout=90, json=body)
     d = r.json()
     tid = d.get("task_id")
     if not tid:
@@ -320,24 +351,58 @@ async def video_status(
     task_id: Annotated[str, Field(description="task_id returned by generate_video")],
 ) -> dict:
     """Poll a video job. Returns {status: Queueing|Processing|Success|Fail};
-    on Success also {url} — the video re-hosted locally (provider links expire)."""
+    on Success also {url} — the video re-hosted locally (provider links expire).
+    Works for both v1 and v2 (H3) task_ids — the right API is probed."""
     vk = _vk(ctx)
-    r = await _llm(vk, "GET", f"/minimax/v1/query/video_generation?task_id={task_id}",
-                   timeout=60)
-    d = r.json()
-    status = d.get("status") or "unknown"
+    d = None
+    for ver in ("v2", "v1"):
+        try:
+            r = await _llm(vk, "GET",
+                           f"/minimax/{ver}/query/video_generation?task_id={task_id}",
+                           timeout=60)
+            cand = r.json()
+            items = cand.get("items")          # v2 wraps tasks in items[]
+            if items is not None:              # v2 ignores task_id — filter
+                cand = next((i for i in items
+                             if str(i.get("id")) == str(task_id)), {})
+                if not cand:
+                    continue                   # task not on v2 -> try v1
+            if cand.get("status") or cand.get("file_id") or cand.get("content"):
+                d = cand
+                break
+            d = cand
+        except ValueError:
+            continue
+    if d is None:
+        raise ValueError("task not found on v1/v2 query endpoints")
+    status = (d.get("status") or "unknown")
+    status = {"succeeded": "Success", "failed": "Fail"}.get(status.lower(), status)
     out = {"task_id": task_id, "status": status}
-    fid = d.get("file_id")
-    if status == "Success" and fid:
-        fr = await _llm(vk, "GET", f"/minimax/v1/files/retrieve?file_id={fid}",
-                        timeout=60)
-        dl = ((fr.json().get("file") or {}).get("download_url")
-              or fr.json().get("download_url"))
+    if status == "Success":
+        # v2: content.url / file list; v1: file_id -> files/retrieve
+        dl = ((d.get("content") or {}).get("url") if isinstance(d.get("content"), dict) else None)
+        fid = d.get("file_id")
+        if not dl and fid:
+            if not MINIMAX_KEY:
+                raise ValueError("MINIMAX_PAYG_KEY not set on media-mcp")
+            async with httpx.AsyncClient(timeout=60) as c:
+                fr = await c.get(
+                    f"{MINIMAX_API}/v1/files/retrieve?file_id={fid}",
+                    headers={"Authorization": f"Bearer {MINIMAX_KEY}"})
+                fr.raise_for_status()
+            dl = ((fr.json().get("file") or {}).get("download_url")
+                  or fr.json().get("download_url"))
+        if not dl and isinstance(d.get("content"), list):
+            for item in d["content"]:
+                if isinstance(item, dict) and item.get("url"):
+                    dl = item["url"]; break
         if dl:
             async with httpx.AsyncClient(timeout=300) as c:
                 vid = (await c.get(dl)).content
             out["url"] = _save(vid, ".mp4")
             out["bytes"] = len(vid)
+        else:
+            out["note"] = "no downloadable URL in response — inspect raw"
     return out
 
 
@@ -425,10 +490,7 @@ async def register_voice_clone(
     Reuse it in synthesize_speech(model='minimax/speech-2.8-hd', voice=<voice_id>).
     Unlike clone_speech (xiaomi zero-shot, per-request), the voice stays
     registered in the MiniMax account and can be reused across calls.
-
-    WARNING: our MiniMax TokenPlan currently rejects voice_clone
-    ('token plan not support model, voice_clone') — this tool will error
-    until the plan is upgraded. Use clone_speech instead."""
+    Billed to the MiniMax PAYG account."""
     vk = _vk(ctx)
     vid = voice_id or f"mcp-{uuid.uuid4().hex[:8]}"
     if not re.match(r"^[A-Za-z][A-Za-z0-9_-]{7,}$", vid):

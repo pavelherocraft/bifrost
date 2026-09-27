@@ -527,7 +527,7 @@ general_settings:
   pass_through_endpoints:
   - path: /minimax/v1/t2a_v2
     target: https://api.minimax.io/v1/t2a_v2
-    headers: &id001
+    headers:
       Authorization: Bearer <MASKED>
       User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) hcproxy/1.0
     methods:
@@ -535,49 +535,57 @@ general_settings:
     timeout: 300
   - path: /minimax/v1/voice_clone
     target: https://api.minimax.io/v1/voice_clone
-    headers: *id001
+    headers:
+      Authorization: Bearer <MASKED>
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) hcproxy/1.0
     methods:
     - POST
     timeout: 300
   - path: /minimax/v1/image_generation
     target: https://api.minimax.io/v1/image_generation
-    headers: *id001
+    headers: &id001
+      Authorization: Bearer <MASKED>
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) hcproxy/1.0
     methods:
     - POST
     timeout: 300
   - path: /minimax/v1/video_generation
     target: https://api.minimax.io/v1/video_generation
-    headers: *id001
+    headers:
+      Authorization: Bearer <MASKED>
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) hcproxy/1.0
     methods:
     - POST
     timeout: 120
   - path: /minimax/v1/query/video_generation
     target: https://api.minimax.io/v1/query/video_generation
-    headers: *id001
+    headers:
+      Authorization: Bearer <MASKED>
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) hcproxy/1.0
     methods:
     - GET
     timeout: 60
   - path: /minimax/v2/video_generation
     target: https://api.minimax.io/v2/video_generation
-    headers: *id001
+    headers:
+      Authorization: Bearer <MASKED>
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) hcproxy/1.0
     methods:
     - POST
     timeout: 300
   - path: /minimax/v2/query/video_generation
     target: https://api.minimax.io/v2/query/video_generation
-    headers: *id001
+    headers:
+      Authorization: Bearer <MASKED>
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) hcproxy/1.0
     methods:
     - GET
     timeout: 60
-  - path: /minimax/v1/files/retrieve
-    target: https://api.minimax.io/v1/files/retrieve
-    headers: *id001
-    methods:
-    - GET
-    timeout: 120
   - path: /minimax/v1/files/upload
     target: https://api.minimax.io/v1/files/upload
-    headers: *id001
+    headers:
+      Authorization: Bearer <MASKED>
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) hcproxy/1.0
     methods:
     - POST
     timeout: 300

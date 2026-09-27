@@ -297,7 +297,7 @@ curl "https://hcbifrost.herocraft.com/litellm/minimax/v2/query/video_generation?
       <tr><td><code>generate_video</code> + <code>video_status</code></td><td>Видео MiniMax (Hailuo-2.3/02, T2V-01): submit → poll → URL</td></tr>
       <tr><td><code>synthesize_speech</code></td><td>TTS: голоса mimo/minimax, style-инструкции, voicedesign</td></tr>
       <tr><td><code>clone_speech</code></td><td>Речь клонированным голосом (сэмпл wav/mp3 до 10MB)</td></tr>
-      <tr><td><code>register_voice_clone</code></td><td>Persistent MiniMax-клон (voice_id) — пока блокируется TokenPlan; рабочий клон: <code>clone_speech</code> (xiaomi zero-shot)</td></tr>
+      <tr><td><code>register_voice_clone</code></td><td>Persistent MiniMax-клон (voice_id, PAYG) → синтез через <code>synthesize_speech</code>; также <code>clone_speech</code> (xiaomi zero-shot)</td></tr>
       <tr><td><code>transcribe_audio</code></td><td>Транскрибация аудио (ASR)</td></tr>
     </table>
     <p style="margin-top:8px"><b>Экономия контекста:</b> тузы возвращают URL (<code>https://hcbifrost.herocraft.com/media-files/…</code>, TTL 24ч), а не base64. Цепочка image→video: URL из <code>generate_image</code> передаётся в <code>generate_video.first_frame_url</code>.</p>

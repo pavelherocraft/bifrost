@@ -59,7 +59,7 @@ $cfg = $cfg -replace '(?i)(password\s*[:=]\s*)\S+','$1<MASKED>'
 Remove-Item "$env:TEMP\opencode\cfg.raw.yaml" -ErrorAction SilentlyContinue
 
 # ---------- 5. ГЛОБАЛЬНЫЙ САНИТАЙЗ + секрет-гейт ----------
-$MASKS = @($sudoPass,'sk-or-v1[A-Za-z0-9\-]+','sk-tp-[A-Za-z0-9\-]+','sk-cp-[A-Za-z0-9\-]+','sk-[A-Za-z0-9]{24,}')
+$MASKS = @($sudoPass,'sk-or-v1[A-Za-z0-9\-]+','sk-tp-[A-Za-z0-9\-]+','sk-cp-[A-Za-z0-9\-]+','sk-api-[A-Za-z0-9_\-]+','sk-[A-Za-z0-9]{24,}')
 $leaks = @()
 $selfPath = $PSCommandPath
 Get-ChildItem $infra -Recurse -File | ForEach-Object {

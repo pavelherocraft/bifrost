@@ -4,6 +4,40 @@
 
 ---
 
+### [2026-09-28] — MiniMax PAYG-ключ: H3-видео, voice_clone, спасение видео и TTS
+
+Подключён отдельный MiniMax Pay-as-you-go ключ (`sk-api-…`, в config.yaml
+как второй header-блок; в снапшоте маскируется — в `sync.ps1` добавлен
+паттерн `sk-api-[A-Za-z0-9_-]+`).
+
+**На PAYG переведены passthrough-роуты**: `v2/video_generation` +
+`v2/query` (H3), `v1/voice_clone`, `v1/files/upload`, `v1/t2a_v2`
+(клонированные voice_id существуют только в PAYG-аккаунте + баланс
+TokenPlan для speech исчерпан), `v1/video_generation` + `v1/query`
+(квота видео TokenPlan исчерпана — `usage limit reached`). Остались на
+TokenPlan: `image_generation`. Бэкап `config.yaml.bak.payg-minimax-20260928`.
+
+**media-mcp** (`server.py`):
+- `MiniMax-H3` в `video_models` (default), v2 API: `content[]` с
+  `role: first_frame`/`last_frame`, обязательные `resolution`,
+  `duration`, `ratio` (`adaptive` при i2v)
+- `generate_video`: параметры `ratio`, `last_frame_url`; маршрутизация
+  v1/v2 по модели
+- `video_status`: пробует v2 → v1; нормализация `items[]` (v2 — это
+  список задач, task_id игнорируется апстримом → фильтр по `id`),
+  статусы `succeeded`→`Success`
+- `files/retrieve`: LiteLLM managed-роуты перехватывают `/minimax/*`
+  и любой `/<x>/*` («'mmx' is not a valid LlmProviders») — вызов
+  идёт напрямую в `api.minimax.io` с `MINIMAX_PAYG_KEY` из
+  `/opt/media-mcp/.env` (EnvironmentFile в unit, chmod 600)
+- `register_voice_clone`: рабочий через PAYG (сэмпл ≥~10с)
+
+**Верификация e2e**: H3 t2v submit → `Success` → mp4 4.8MB re-hosted;
+Hailuo-2.3 (PAYG) → `Success` → mp4 531KB; `register_voice_clone` →
+`voice_id=mcp-testclone1`; `synthesize_speech` клоном → mp3 56KB.
+
+---
+
 ### [2026-09-28] — модель `MiniMax-M3.1-Flash-Preview`
 
 Новый preview от MiniMax (релиз 27.09, ultra-fast текстовая модель для

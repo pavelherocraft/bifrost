@@ -6,6 +6,7 @@ After=network.target
 Type=simple
 User=dev01
 WorkingDirectory=/opt/media-mcp
+EnvironmentFile=/opt/media-mcp/.env
 ExecStart=/opt/media-mcp/venv/bin/python /opt/media-mcp/server.py
 Restart=always
 RestartSec=3
