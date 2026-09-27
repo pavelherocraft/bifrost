@@ -4,6 +4,38 @@
 
 ---
 
+### [2026-09-28] — MCP `media`: обогащённые схемы тулов + карточка на setup-странице
+
+**Схемы тулов** (`/opt/media-mcp/server.py`): все параметры переведены на
+`Annotated[..., Field(description=...)]` (pydantic 2) — агенты теперь
+видят per-field описания, а не голые имена. Документировано: выбор
+моделей (все `model` указывают на `list_media_models()`), image→video
+через `generate_video.first_frame_url` (URL из `generate_image`),
+асинхронность видео (`generate_video` → `task_id` → `video_status`),
+выбор голосов mimo/minimax и `style`-инструкции (обязателен для
+voicedesign), аудио-теги в тексте (`(唱歌)`, `(laughs)`), форматы входа
+для clone/ASR (URL | data-URI | `upload:<name>` | base64, wav/mp3 ≤10MB),
+upload-флоу (`POST /media-upload` → `ref`). `list_media_models`
+расширен: пайплайны, notes про TTL 24ч и URL-only ответы.
+
+**Setup-страница**: карточка «🧩 MCP-сервер `media`» в
+`/opt/opencode-setup/index.html` — таблица 7 тулов, экономия контекста
+(URL вместо base64), upload-эндпоинт, поведение доступа. Секция `mcp`
+в генерируемом opencode-конфиге уже строилась динамически из
+`/setup-opencode/api/mcp` — юзерам разрешённых команд `media`
+подключается автоматически (`type: remote`, Bearer `{env:LITELLM_API_KEY}`).
+
+**infra/**: `sync.ps1` дополнен инвентарём media-mcp — `server.py`,
+`requirements.txt` (создан: `mcp>=1.30,<2, httpx, uvicorn`),
+`systemd/media-mcp.service`, `cron.hourly-cleanup.sh`.
+
+**Верификация**: `tools/list` через шлюз — описания видны на всех
+параметрах; `/mcp?user=<Coders>` → `media` в списке, `/mcp?user=<Analytics>`
+→ только zai_* (без `media`); карточка отдаётся публичной страницей.
+Бэкап страницы: `index.html.bak.mcpcard`.
+
+---
+
 ### [2026-09-25] — аудио-модели Xiaomi MiMo-V2.5: voice/xiaomi/* (ASR + 3×TTS)
 
 **Изменение**: добавлены 4 деплоймента через `/model/new` (Token Plan

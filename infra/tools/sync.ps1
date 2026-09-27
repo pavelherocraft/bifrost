@@ -8,7 +8,7 @@ $infra  = Join-Path $repo 'infra'
 $vmsnap = Join-Path $repo '.opencode\vm-snapshots'
 $vmssh  = Join-Path $repo 'vm-ssh-helper.ps1'
 if (-not (Test-Path $vmssh)) { $vmssh = Join-Path $repo '.opencode\bin\vmssh.ps1' }
-foreach ($d in 'litellm\admin','litellm\nginx','opencode-setup','systemd','sql') {
+foreach ($d in 'litellm\admin','litellm\nginx','opencode-setup','media-mcp','systemd','sql') {
   New-Item -ItemType Directory -Force -Path (Join-Path $infra $d) | Out-Null
 }
 New-Item -ItemType Directory -Force -Path "$vmsnap\backups","$vmsnap\full-dumps" | Out-Null
@@ -39,6 +39,13 @@ foreach ($f in 'api.py','index.html','users-btn.js','vkeys-btn.js','glm-swap-btn
   Pull "/opt/opencode-setup/$f" (Join-Path $infra "opencode-setup\$f")
 }
 VM "cat /etc/systemd/system/opencode-api.service" | Set-Content (Join-Path $infra 'systemd\opencode-api.service')
+VM "cat /etc/systemd/system/media-mcp.service" | Set-Content (Join-Path $infra 'systemd\media-mcp.service')
+
+# ---------- 3b. committed: media-mcp (FastMCP-сервер /opt/media-mcp) ----------
+foreach ($f in 'server.py','requirements.txt') {
+  Pull "/opt/media-mcp/$f" (Join-Path $infra "media-mcp\$f")
+}
+VM "cat /etc/cron.hourly/media-mcp-clean 2>/dev/null" | Set-Content (Join-Path $infra 'media-mcp\cron.hourly-cleanup.sh')
 $sql = VM "docker exec -i litellm-pg psql -U litellm -d litellm -At -c `"SELECT '-- function audit_row_change()'; SELECT pg_get_functiondef('audit_row_change()'::regprocedure); SELECT '-- triggers'; SELECT pg_get_triggerdef(oid) || ';' FROM pg_trigger WHERE tgname LIKE 'trg_audit%';`" </dev/null"
 $sql | Set-Content (Join-Path $infra 'sql\audit_schema.sql')
 

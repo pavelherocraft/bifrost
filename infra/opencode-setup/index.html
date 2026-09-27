@@ -283,6 +283,24 @@ curl "https://hcbifrost.herocraft.com/litellm/minimax/v2/query/video_generation?
     </details>
   </div>
 
+  <!-- ==================== MEDIA MCP ==================== -->
+  <div class="card">
+    <h2><span class="ico">🧩</span>MCP-сервер <code>media</code> — генерация медиа для агентов</h2>
+    <p>Единый MCP-сервер для агентов (opencode и любые MCP-клиенты). Если у твоей команды есть доступ — он <b>уже включён в сгенерированный конфиг выше</b> (секция <code>"mcp": {"media": {...}}</code>) и авторизуется тем же ключом <code>LITELLM_API_KEY</code>. Endpoint: <code>https://hcbifrost.herocraft.com/litellm/media/mcp</code></p>
+    <table class="tbl" style="margin-top:10px">
+      <tr><th>Тул</th><th>Что делает</th></tr>
+      <tr><td><code>list_media_models</code></td><td>Каталог моделей/голосов/форматов (агент вызывает первым)</td></tr>
+      <tr><td><code>generate_image</code></td><td>Картинки: gemini-3.1/pro-image, gpt-image-1.5/2/2.5-*, minimax image-01</td></tr>
+      <tr><td><code>generate_video</code> + <code>video_status</code></td><td>Видео MiniMax (Hailuo-2.3/02, T2V-01): submit → poll → URL</td></tr>
+      <tr><td><code>synthesize_speech</code></td><td>TTS: голоса mimo/minimax, style-инструкции, voicedesign</td></tr>
+      <tr><td><code>clone_speech</code></td><td>Речь клонированным голосом (сэмпл wav/mp3 до 10MB)</td></tr>
+      <tr><td><code>transcribe_audio</code></td><td>Транскрибация аудио (ASR)</td></tr>
+    </table>
+    <p style="margin-top:8px"><b>Экономия контекста:</b> тузы возвращают URL (<code>https://hcbifrost.herocraft.com/media-files/…</code>, TTL 24ч), а не base64. Цепочка image→video: URL из <code>generate_image</code> передаётся в <code>generate_video.first_frame_url</code>.</p>
+    <p style="margin-top:6px"><b>Загрузка локальных файлов</b> (сэмпл голоса, аудио для транскрибации): <code>POST /media-upload?name=file.wav</code> с Bearer-ключом → получаешь <code>ref</code>, его передаёшь в тул как <code>upload:…</code>.</p>
+    <p style="margin-top:6px;color:var(--muted)">Скорость: картинка ~10–30с, TTS ~5с, видео 1–5 мин (асинхронно). Если <code>media</code> нет в твоём конфиге — у команды нет гранта, попроси админа.</p>
+  </div>
+
   <!-- ==================== ТРАБЛШУТИНГ ==================== -->
   <div class="card">
     <h2><span class="ico">🛠️</span>Если что-то не работает</h2>
