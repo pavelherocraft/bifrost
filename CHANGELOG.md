@@ -4,6 +4,20 @@
 
 ---
 
+### [2026-09-28] — `MiniMax-M3.1-Flash-Preview`: метаданные + reasoning-флаг
+
+По докам platform.minimax.io модель: **1M контекст, мультимодал
+(image+video input), tunable thinking** («frontier multimodal coding
+model»). Обновлено `model_info` (PATCH /model/…/update):
+supports_vision/video_input/reasoning/function_calling/prompt_caching,
+1M in / 131k out. `api.py`: добавлена в `_REASONING_CAPABLE` (opencode
+получит `options.thinking` в конфиге). Карточка на setup-странице
+уточнена. `/models` теперь отдаёт `context: 1M, vision+video,
+reasoning: true`. Доступна только через Token Plan / MiniMax Code
+(ограничение апстрима).
+
+---
+
 ### [2026-09-28] — MiniMax billing split: обычный TTS → TokenPlan, клоны/видео → PAYG
 
 Уточнение биллинга: `t2a_v2` возвращён на TokenPlan-ключ для системных
