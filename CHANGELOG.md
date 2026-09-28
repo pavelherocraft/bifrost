@@ -4,6 +4,17 @@
 
 ---
 
+### [2026-09-28] — reasoning-варианты для MiniMax-M3 и M3.1-Flash-Preview
+
+`api.py`: обе модели добавлены в `_REASONING_VARIANTS` — 5 уровней
+`reasoningEffort`: `low / medium / high / xhigh / max`. Апстрим MiniMax
+валидирует параметр (на `med`/`off` отвечает 400 со списком allowed) и
+реально масштабирует reasoning-токены — проверено e2e на обеих моделях.
+В opencode появится переключатель уровня рассуждений.
+Бэкап `api.py.bak.reasoning-mm`, `opencode-api` перезапущен.
+
+---
+
 ### [2026-09-28] — `MiniMax-M3.1-Flash-Preview`: метаданные + reasoning-флаг
 
 По докам platform.minimax.io модель: **1M контекст, мультимодал

@@ -88,6 +88,20 @@ _REASONING_VARIANTS = {
         "high": {"reasoningEffort": "high"},
         "max":  {"reasoningEffort": "max"},
     },
+    "MiniMax-M3": {
+        "low":    {"reasoningEffort": "low"},
+        "medium": {"reasoningEffort": "medium"},
+        "high":   {"reasoningEffort": "high"},
+        "xhigh":  {"reasoningEffort": "xhigh"},
+        "max":    {"reasoningEffort": "max"},
+    },
+    "MiniMax-M3.1-Flash-Preview": {
+        "low":    {"reasoningEffort": "low"},
+        "medium": {"reasoningEffort": "medium"},
+        "high":   {"reasoningEffort": "high"},
+        "xhigh":  {"reasoningEffort": "xhigh"},
+        "max":    {"reasoningEffort": "max"},
+    },
     "GLM-5.3": {
         "low":  {"reasoningEffort": "low"},
         "high": {"reasoningEffort": "high"},
