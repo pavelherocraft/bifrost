@@ -77,7 +77,7 @@ VOICE_CLONE_MODELS = {
 TTS_MODELS = {
     "voice/xiaomi/mimo-v2.5-tts": "preset mimo voices + style instructions; singing via (唱歌) tag in text",
     "voice/xiaomi/mimo-v2.5-tts-voicedesign": "free-form voice from `style` description (style REQUIRED)",
-    "minimax/speech-2.8-hd": "minimax system voices (voice param = minimax voice id)",
+    "minimax/speech-2.8-hd": "system voices (TokenPlan) or cloned voice_id from register_voice_clone (auto-routed to PAYG)",
 }
 
 mcp = FastMCP("media", host="0.0.0.0", port=9101,
@@ -420,10 +420,15 @@ async def synthesize_speech(
     full lists in list_media_models()."""
     vk = _vk(ctx)
     if model.startswith("minimax/"):
+        vid = voice or "female-shaonv"
+        # cloned voice_ids live in the PAYG account; system voices go
+        # through TokenPlan billing
+        path = ("/minimax/v1/t2a_v2" if vid in MINIMAX_VOICES
+                else "/minimaxpayg/v1/t2a_v2")
         body = {"model": "speech-2.8-hd", "text": text,
-                "voice_setting": {"voice_id": voice or "female-shaonv"},
+                "voice_setting": {"voice_id": vid},
                 "audio_setting": {"format": "mp3"}}
-        r = await _llm(vk, "POST", "/minimax/v1/t2a_v2", timeout=180, json=body)
+        r = await _llm(vk, "POST", path, timeout=180, json=body)
         d = r.json()
         if (d.get("base_resp") or {}).get("status_code", 0) != 0:
             raise ValueError(f"minimax: {(d.get('base_resp') or {}).get('status_msg')}")

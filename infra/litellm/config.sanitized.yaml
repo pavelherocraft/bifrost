@@ -533,6 +533,14 @@ general_settings:
     methods:
     - POST
     timeout: 300
+  - path: /minimaxpayg/v1/t2a_v2
+    target: https://api.minimax.io/v1/t2a_v2
+    headers:
+      Authorization: Bearer <MASKED>
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) hcproxy/1.0
+    methods:
+    - POST
+    timeout: 300
   - path: /minimax/v1/voice_clone
     target: https://api.minimax.io/v1/voice_clone
     headers:

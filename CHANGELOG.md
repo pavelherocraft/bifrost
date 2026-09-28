@@ -4,6 +4,18 @@
 
 ---
 
+### [2026-09-28] — MiniMax billing split: обычный TTS → TokenPlan, клоны/видео → PAYG
+
+Уточнение биллинга: `t2a_v2` возвращён на TokenPlan-ключ для системных
+голосов; добавлен второй passthrough `/minimaxpayg/v1/t2a_v2` (тот же
+upstream, PAYG-заголовки). `synthesize_speech` маршрутизирует по
+`voice`: системные minimax-голоса → TokenPlan, кастомные voice_id
+(клоны из `register_voice_clone`, живут в PAYG-аккаунте) → PAYG.
+Проверено: системный голос → mp3 44KB (TokenPlan), клон → mp3 42KB
+(PAYG).
+
+---
+
 ### [2026-09-28] — MiniMax PAYG-ключ: H3-видео, voice_clone, спасение видео и TTS
 
 Подключён отдельный MiniMax Pay-as-you-go ключ (`sk-api-…`, в config.yaml
