@@ -4,6 +4,18 @@
 
 ---
 
+### [2026-09-30] — media-mcp: фикс image-to-video — фреймы инлайнятся в data URI
+
+`server.py`: `generate_video` больше не передаёт HTTP(S)-URL фреймов в MiniMax
+как есть — MiniMax не мог выкачать файл с `hcbifrost.herocraft.com/media-files/`
+и таск завершался `status: Fail` (при этом деньги на PAYG списывались).
+Новый `_img_data_uri()` резолвит источник (URL / upload: / data-URI / base64)
+и подставляет `data:<mime>;base64,...` — доказанно рабочий путь.
+Применяется и к v2 `content[].image_url` (H3: first_frame, last_frame),
+и к v1 `first_frame_image` (Hailuo-02/2.3, T2V-01) — там был тот же баг.
+
+---
+
 ### [2026-09-28] — reasoning-варианты для MiniMax-M3 и M3.1-Flash-Preview
 
 `api.py`: обе модели добавлены в `_REASONING_VARIANTS` — 5 уровней

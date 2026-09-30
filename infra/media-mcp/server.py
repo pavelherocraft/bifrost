@@ -165,6 +165,14 @@ async def _resolve_source(source: str, client: httpx.AsyncClient) -> bytes:
         raise ValueError("source must be http(s) URL, data-URI, 'upload:<name>' or base64")
 
 
+async def _img_data_uri(source: str, client: httpx.AsyncClient) -> str:
+    """Resolve any image source -> data: URI. MiniMax often fails to fetch
+    plain HTTP(S) URLs (e.g. our /media-files/ links) -> task ends with
+    status=Fail; inline base64 always works."""
+    raw = await _resolve_source(source, client)
+    return f"data:{_mime_for(raw)};base64,{base64.b64encode(raw).decode()}"
+
+
 # ---------- tools ----------
 
 @mcp.tool()
@@ -306,13 +314,18 @@ async def generate_video(
     duration_s: Annotated[Optional[int], Field(description="Clip length in seconds (H3: 5-10; v1: 5-10); omit for provider default")] = None,
     resolution: Annotated[str, Field(description="768P (default) | 1080P | 2K (H3 only)")] = "768P",
     ratio: Annotated[Optional[str], Field(description="Aspect ratio 16:9|4:3|1:1|3:4|9:16|21:9 — REQUIRED for H3 text-to-video; 'adaptive' allowed when a frame image is given")] = None,
-    first_frame_url: Annotated[Optional[str], Field(description="Optional image URL (e.g. from generate_image/edit_image) -> image-to-video first frame")] = None,
-    last_frame_url: Annotated[Optional[str], Field(description="H3 only: image URL for the last frame (first+last frame mode)")] = None,
+    first_frame_url: Annotated[Optional[str], Field(description="Optional image (URL from generate_image/edit_image, upload:<name>, data URI or base64) -> image-to-video first frame; converted to inline data URI server-side (MiniMax can't fetch hosted URLs)")] = None,
+    last_frame_url: Annotated[Optional[str], Field(description="H3 only: image for the last frame (first+last frame mode); same source formats as first_frame_url")] = None,
 ) -> dict:
     """Submit an async video generation job (MiniMax). Returns {task_id} —
     generation takes minutes; poll video_status(task_id) until status=Success.
     H3 models use the v2 multimodal API; others use v1."""
     vk = _vk(ctx)
+    async with httpx.AsyncClient(timeout=60) as c:
+        if first_frame_url:
+            first_frame_url = await _img_data_uri(first_frame_url, c)
+        if last_frame_url:
+            last_frame_url = await _img_data_uri(last_frame_url, c)
     if model in VIDEO_V2_MODELS:
         content = [{"type": "text", "text": prompt}]
         if first_frame_url:
