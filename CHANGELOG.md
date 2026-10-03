@@ -18,6 +18,14 @@ hybrid Mamba-Transformer MoE, 1M контекст, reasoning
 **Верификация**: e2e через VK команды All Access → 200,
 `reasoning_content` в ответе. Временный ключ удалён.
 
+**Фикс метаданных**: opencode `/models` отдавал нули — `_extract_meta`
+читает `mi.max_tokens` (а не `max_output_tokens`) для output, плюс
+`reasoning` берётся из `_REASONING_CAPABLE` в `api.py`. Патчем
+`/model/<id>/update` дозаписан `max_tokens=131072`; модель добавлена
+в `_REASONING_CAPABLE`; `opencode-api` перезапущен (кэш `_MODEL_INFO`
+строится один раз). Теперь `/models` отдаёт `context: 1048576,
+output: 131072, reasoning: true`. Бэкап `api.py.bak.nemotron`.
+
 ---
 
 ### [2026-09-30] — media-mcp: фикс image-to-video — фреймы инлайнятся в data URI
