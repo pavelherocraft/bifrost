@@ -4,6 +4,22 @@
 
 ---
 
+### [2026-10-02] — модель `nvidia/nemotron-3-ultra-550b-a55b` (NVIDIA build)
+
+Новый деплоймент через `/model/new`: OpenAI-совместимый upstream
+`https://integrate.api.nvidia.com/v1` (`openai/nvidia/nemotron-3-ultra-550b-a55b`,
+ключ `nvapi-*` в litellm_params). NVIDIA Nemotron-3-Ultra 550B-A55B —
+hybrid Mamba-Transformer MoE, 1M контекст, reasoning
+(`chat_template_kwargs.enable_thinking`), tool calling.
+По карточке модели это trial-API NVIDIA — цены в model_info = 0.
+
+Грант: только команда **All Access** (просил pavel — тестовый доступ).
+
+**Верификация**: e2e через VK команды All Access → 200,
+`reasoning_content` в ответе. Временный ключ удалён.
+
+---
+
 ### [2026-09-30] — media-mcp: фикс image-to-video — фреймы инлайнятся в data URI
 
 `server.py`: `generate_video` больше не передаёт HTTP(S)-URL фреймов в MiniMax
