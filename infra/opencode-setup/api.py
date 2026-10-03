@@ -66,6 +66,8 @@ _REASONING_CAPABLE = {
     "Kimi K3-256K", "Kimi K2.8",
     "MiniMax-M2.5", "MiniMax-M3", "MiniMax-M3.1-Flash-Preview",
     "nvidia/nemotron-3-ultra-550b-a55b",
+    "nvidia/deepseek-v4.1-flash (free)", "nvidia/glm-5.3 (free)",
+    "nvidia/glm-5.3-flash (free)", "nvidia/kimi-k3 (free)",
     "Qwen3.5-plus", "QWEN3.7-plus",
     "qwen3.7-max", "qwen3.6-flash",
     "qwen3-coder-plus", "qwen3-coder-flash", "qwen3-max",

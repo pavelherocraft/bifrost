@@ -4,6 +4,30 @@
 
 ---
 
+### [2026-10-02] — 4 бесплатные модели NVIDIA build: deepseek-v4.1-flash, glm-5.3(+flash), kimi-k3
+
+Деплойменты через `/model/new` на тот же upstream
+`https://integrate.api.nvidia.com/v1` с `nvapi-*` ключом (trial, цены = 0).
+Публичные имена с суффиксом `(free)`:
+
+- `nvidia/deepseek-v4.1-flash (free)` → `deepseek-ai/deepseek-v4.1-flash`
+- `nvidia/glm-5.3 (free)` → `z-ai/glm-5.3`
+- `nvidia/glm-5.3-flash (free)` → `z-ai/glm-5.3-flash`
+- `nvidia/kimi-k3 (free)` → `moonshotai/kimi-k3`
+
+Внимание: upstream id'ы используют точки (`z-ai/glm-5.3`), наши имена —
+как в карточках build.nvidia.com. Метаданные: 1M ctx / 131k out,
+reasoning + function_calling; vision по аналогам (glm-5.3 — нет,
+остальные — да). Грант: **все команды кроме Agents** (11 шт, один
+UPDATE по `models`-массиву). Все 4 добавлены в `_REASONING_CAPABLE`
+(`api.py`, бэкап `api.py.bak.nvidia-free`, `opencode-api` перезапущен).
+
+**Верификация**: все 4 через VK команды Coders → 200 с
+`reasoning_content`; у Agents грант отсутствует (SQL-проверка).
+NVIDIA холодно стартует модели — первый запрос может идти 30-120с.
+
+---
+
 ### [2026-10-02] — модель `nvidia/nemotron-3-ultra-550b-a55b` (NVIDIA build)
 
 Новый деплоймент через `/model/new`: OpenAI-совместимый upstream
