@@ -4,6 +4,27 @@
 
 ---
 
+### [2026-10-07] — allowed_routes для VS Code LiteLLM extension: info_routes + daily activity
+
+Проблема: LiteLLM-расширение VS Code подключалось, но ругалось на
+недостаточные привилегии и показывало дефолтный контекст 128k. Причина —
+ключ был ограничен `allowed_routes: ["llm_api_routes"]`: метаданные
+моделей (`/v1/model/info` — реальные `max_input_tokens`, capabilities)
+и статистика (`/user/daily/activity`) отвечали 403.
+
+SQL-апдейтом проставлено
+`{llm_api_routes, info_routes, /user/daily/activity, /user/daily/activity/aggregated}`
+на **70 ключей** (все, кто был на чистом `llm_api_routes`). Остальные
+821 ключ без ограничений не тронуты. Группа `self_managed_routes`
+сознательно НЕ выдана — включает `/model/new`, `/team/member_add` и пр.
+мутирующие роуты; нужные точечные пути прописаны напрямую.
+
+Нюанс: `/v1/models` по-прежнему отдаёт голый OpenAI-формат без метаданных
+— если какое-то расширение читает только его, контекст не подтянется
+(лечится только оверрайдом в настройках расширения).
+
+---
+
 ### [2026-10-07] — media-mcp: `generate_video` получил `reference_media` (H3 r2va)
 
 Новый опциональный параметр `reference_media: list[str]` для MiniMax-H3
