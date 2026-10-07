@@ -188,6 +188,34 @@ async def _img_data_uri(source: str, client: httpx.AsyncClient) -> str:
     return f"data:{_mime_for(raw)};base64,{base64.b64encode(raw).decode()}"
 
 
+_LARGE_MEDIA_EXT = {".mp4": "video", ".mov": "video",
+                    ".mp3": "audio", ".wav": "audio", ".m4a": "audio",
+                    ".aac": "audio", ".ogg": "audio", ".flac": "audio"}
+
+async def _ref_media_item(src: str, client: httpx.AsyncClient) -> tuple[dict, str]:
+    """Build a v2 reference-to-video content item -> (item, role).
+    Role (reference_image/video/audio) is detected from magic bytes;
+    for video/audio given as http(s) URLs the URL is passed through so the
+    provider fetches it (keeps the JSON body under the 64MB limit)."""
+    if src.startswith(("http://", "https://")):
+        m = re.search(r"\.([a-zA-Z0-9]{2,5})(?:[?#].*)?$", src)
+        kind = _LARGE_MEDIA_EXT.get("." + m.group(1).lower()) if m else None
+        if kind:
+            t = f"{kind}_url"
+            return {"type": t, t: {"url": src}, "role": f"reference_{kind}"}, f"reference_{kind}"
+    raw = await _resolve_source(src, client)
+    mime = _mime_for(raw)
+    kind = mime.split("/")[0]
+    if kind not in ("image", "video", "audio"):
+        raise ValueError(f"reference_media: unsupported type {mime} ({_ext_for(raw)}); "
+                         f"expected image/video/audio")
+    t = f"{kind}_url"
+    # pass the original URL for large media; images and non-URL sources go inline
+    url = src if (kind != "image" and src.startswith(("http://", "https://"))) \
+        else f"data:{mime};base64,{base64.b64encode(raw).decode()}"
+    return {"type": t, t: {"url": url}, "role": f"reference_{kind}"}, f"reference_{kind}"
+
+
 def _task_cache_get(task_id: str):
     """Return cached {url, bytes} for a finished video task if the hosted
     file still exists (24h TTL cleanup may have removed it)."""
@@ -357,24 +385,40 @@ async def edit_image(
 async def generate_video(
     ctx: Context,
     prompt: Annotated[str, Field(description="Scene description: subject, motion, camera")],
-    model: Annotated[str, Field(description="Video model — see list_media_models().video_models. MiniMax-H3 = newest v2 (up to 2K, first+last frame, reference media); Hailuo-2.3/02, T2V-01 = v1")] = "MiniMax-H3",
+    model: Annotated[str, Field(description="Video model — see list_media_models().video_models. MiniMax-H3 = newest v2 (up to 2K, first+last frame, reference_media inputs); Hailuo-2.3/02, T2V-01 = v1")] = "MiniMax-H3",
     duration_s: Annotated[Optional[int], Field(description="Clip length in seconds (H3: 5-10; v1: 5-10); omit for provider default")] = None,
     resolution: Annotated[str, Field(description="768P (default) | 1080P | 2K (H3 only)")] = "768P",
     ratio: Annotated[Optional[str], Field(description="Aspect ratio 16:9|4:3|1:1|3:4|9:16|21:9 — REQUIRED for H3 text-to-video; 'adaptive' allowed when a frame image is given")] = None,
     first_frame_url: Annotated[Optional[str], Field(description="Optional image (URL from generate_image/edit_image, upload:<name>, data URI or base64) -> image-to-video first frame; converted to inline data URI server-side (MiniMax can't fetch hosted URLs)")] = None,
     last_frame_url: Annotated[Optional[str], Field(description="H3 only: image for the last frame (first+last frame mode); same source formats as first_frame_url")] = None,
+    reference_media: Annotated[Optional[list[str]], Field(description="H3 only: reference-to-video inputs — list of sources, each http(s) URL | upload:<name> | data-URI | base64. Role auto-detected by magic bytes: image -> reference_image (max 9), video -> reference_video (max 3), audio -> reference_audio (max 3). Mutually exclusive with first_frame_url/last_frame_url (MiniMax API rule)")] = None,
 ) -> dict:
     """Submit an async video generation job (MiniMax). Returns {task_id} —
     generation takes minutes; poll video_status(task_id) until status=Success.
     H3 models use the v2 multimodal API; others use v1."""
     vk = _vk(ctx)
-    async with httpx.AsyncClient(timeout=60) as c:
+    if reference_media:
+        if model not in VIDEO_V2_MODELS:
+            raise ValueError("reference_media works only with MiniMax-H3 / H3-Max (v2 API)")
+        if first_frame_url or last_frame_url:
+            raise ValueError("reference_media is mutually exclusive with "
+                             "first_frame_url/last_frame_url (MiniMax API rule)")
+    async with httpx.AsyncClient(timeout=180) as c:
         if first_frame_url:
             first_frame_url = await _img_data_uri(first_frame_url, c)
         if last_frame_url:
             last_frame_url = await _img_data_uri(last_frame_url, c)
+        refs = []
+        counts = {"image": 0, "video": 0, "audio": 0}
+        for src in (reference_media or []):
+            item, role = await _ref_media_item(src, c)
+            counts[role.split("_")[1]] += 1
+            refs.append(item)
+        if counts["image"] > 9 or counts["video"] > 3 or counts["audio"] > 3:
+            raise ValueError(f"reference_media over MiniMax limits {counts} "
+                             "(max 9 images / 3 videos / 3 audios)")
     if model in VIDEO_V2_MODELS:
-        content = [{"type": "text", "text": prompt}]
+        content = [{"type": "text", "text": prompt}] + refs
         if first_frame_url:
             content.append({"type": "image_url",
                             "image_url": {"url": first_frame_url},
@@ -383,7 +427,7 @@ async def generate_video(
             content.append({"type": "image_url",
                             "image_url": {"url": last_frame_url},
                             "role": "last_frame"})
-        has_frame = bool(first_frame_url or last_frame_url)
+        has_frame = bool(first_frame_url or last_frame_url or refs)
         body = {"model": model, "content": content,
                 "resolution": resolution,
                 "duration": duration_s or 5,

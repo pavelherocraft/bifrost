@@ -4,6 +4,20 @@
 
 ---
 
+### [2026-10-07] — media-mcp: `generate_video` получил `reference_media` (H3 r2va)
+
+Новый опциональный параметр `reference_media: list[str]` для MiniMax-H3
+(v2 API, reference-to-video). Каждый элемент — http(s) URL |
+`upload:<name>` | data-URI | base64; роль определяется по magic bytes:
+`image/*` → `reference_image` (≤9), `video/*` → `reference_video` (≤3),
+`audio/*` → `reference_audio` (≤3). Картинки всегда инлайнятся в data-URI
+(MiniMax ненадёжно фетчит наши /media-files ссылки); видео/аудио по
+http(s) передаются URL'ом наружу, чтобы не раздувать JSON-тело
+(лимит MiniMax 64MB). Валидации: refs + first/last_frame взаимоисключающие
+(правило API), refs с v1-моделями (Hailuo/T2V-01) отклоняются.
+
+---
+
 ### [2026-10-07] — media-mcp → «Johnny the Knight MCP» + 4 фикса
 
 **Переименование.** FastMCP-сервер, `alias` в `mcp_servers.media`
