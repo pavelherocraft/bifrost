@@ -17,6 +17,7 @@ Extra route: POST /upload (Bearer VK required) -> files/uploads/.
 
 import base64
 import binascii
+import json
 import os
 import re
 import uuid
@@ -36,6 +37,7 @@ MINIMAX_KEY = os.environ.get("MINIMAX_PAYG_KEY", "")
 PUBLIC_BASE = "https://hcbifrost.herocraft.com"
 FILES_DIR = "/opt/media-mcp/files"
 UPLOADS_DIR = os.path.join(FILES_DIR, "uploads")
+TASKS_CACHE = "/opt/media-mcp/tasks.json"   # task_id -> hosted url (survives TTL cleanup by re-check)
 MAX_UPLOAD = 25 * 1024 * 1024          # nginx client_max_body_size 25M
 MAX_SAMPLE = 10 * 1024 * 1024          # xiaomi voiceclone base64 limit
 
@@ -171,6 +173,36 @@ async def _img_data_uri(source: str, client: httpx.AsyncClient) -> str:
     status=Fail; inline base64 always works."""
     raw = await _resolve_source(source, client)
     return f"data:{_mime_for(raw)};base64,{base64.b64encode(raw).decode()}"
+
+
+def _task_cache_get(task_id: str):
+    """Return cached {url, bytes} for a finished video task if the hosted
+    file still exists (24h TTL cleanup may have removed it)."""
+    try:
+        with open(TASKS_CACHE) as f:
+            entry = json.load(f).get(str(task_id))
+    except Exception:
+        return None
+    if entry and entry.get("url") and os.path.isfile(
+            os.path.join(FILES_DIR, os.path.basename(entry["url"]))):
+        return entry
+    return None
+
+
+def _task_cache_put(task_id: str, url: str, size: int) -> None:
+    try:
+        try:
+            with open(TASKS_CACHE) as f:
+                data = json.load(f)
+        except Exception:
+            data = {}
+        data[str(task_id)] = {"url": url, "bytes": size}
+        tmp = TASKS_CACHE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(data, f)
+        os.replace(tmp, TASKS_CACHE)
+    except Exception:
+        pass
 
 
 # ---------- tools ----------
@@ -365,8 +397,12 @@ async def video_status(
 ) -> dict:
     """Poll a video job. Returns {status: Queueing|Processing|Success|Fail};
     on Success also {url} — the video re-hosted locally (provider links expire).
-    Works for both v1 and v2 (H3) task_ids — the right API is probed."""
+    Works for both v1 and v2 (H3) task_ids — the right API is probed.
+    Repeated polls after Success return the same URL (no re-download)."""
     vk = _vk(ctx)
+    cached = _task_cache_get(task_id)
+    if cached:
+        return {"task_id": task_id, "status": "Success", **cached}
     d = None
     for ver in ("v2", "v1"):
         try:
@@ -414,6 +450,7 @@ async def video_status(
                 vid = (await c.get(dl)).content
             out["url"] = _save(vid, ".mp4")
             out["bytes"] = len(vid)
+            _task_cache_put(task_id, out["url"], out["bytes"])
         else:
             out["note"] = "no downloadable URL in response — inspect raw"
     return out
