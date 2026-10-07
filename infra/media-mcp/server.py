@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""media-mcp — FastMCP server exposing media generation tools through LiteLLM.
+"""Johnny the Knight MCP — FastMCP server exposing media generation tools through LiteLLM.
 
 Runs on 0.0.0.0:9101 (streamable HTTP at /mcp). Registered in LiteLLM
 mcp_servers; LiteLLM forwards the caller's `authorization` header (VK) —
@@ -82,7 +82,7 @@ TTS_MODELS = {
     "minimax/speech-2.8-hd": "system voices (TokenPlan) or cloned voice_id from register_voice_clone (auto-routed to PAYG)",
 }
 
-mcp = FastMCP("media", host="0.0.0.0", port=9101,
+mcp = FastMCP("Johnny the Knight MCP", host="0.0.0.0", port=9101,
               streamable_http_path="/mcp")
 
 
@@ -114,16 +114,25 @@ async def _llm(vk: str, method: str, path: str, timeout: float = 120, **kw):
 
 
 def _ext_for(raw: bytes, hint: str = "") -> str:
-    if raw[:4] == b"RIFF":
-        return ".wav"
-    if raw[:3] == b"ID3" or raw[:2] in (b"\xff\xfb", b"\xff\xf3", b"\xff\xf2"):
-        return ".mp3"
     if raw[:8] == b"\x89PNG\r\n\x1a\n":
         return ".png"
     if raw[:3] == b"\xff\xd8\xff":
         return ".jpg"
-    if raw[4:8] == b"ftyp":
+    if raw[:6] in (b"GIF87a", b"GIF89a"):
+        return ".gif"
+    if raw[:2] == b"BM":
+        return ".bmp"
+    if raw[:4] == b"RIFF":
+        # RIFF container: distinguish WAVE (audio) vs WEBP (image)
+        return ".webp" if raw[8:12] == b"WEBP" else ".wav"
+    if raw[4:12] in (b"ftypheic", b"ftypheix", b"ftyphevc", b"ftyphevx"):
+        return ".heic"
+    if raw[4:12] in (b"ftypavif", b"ftypavis"):
+        return ".avif"
+    if raw[4:12] in (b"ftypM4A ", b"ftypM4V ", b"ftypM4A", b"ftypM4V") or raw[4:8] == b"ftyp":
         return ".mp4"
+    if raw[:3] == b"ID3" or raw[:2] in (b"\xff\xfb", b"\xff\xf3", b"\xff\xf2"):
+        return ".mp3"
     if "pcm" in hint:
         return ".pcm"
     return ".bin"
@@ -131,8 +140,12 @@ def _ext_for(raw: bytes, hint: str = "") -> str:
 
 def _mime_for(raw: bytes) -> str:
     e = _ext_for(raw)
-    return {".wav": "audio/wav", ".mp3": "audio/mpeg", ".png": "image/png",
-            ".jpg": "image/jpeg", ".mp4": "video/mp4"}.get(e, "application/octet-stream")
+    return {".wav": "audio/wav", ".mp3": "audio/mpeg",
+            ".png": "image/png", ".jpg": "image/jpeg",
+            ".webp": "image/webp", ".gif": "image/gif",
+            ".bmp": "image/bmp", ".heic": "image/heic",
+            ".avif": "image/avif",
+            ".mp4": "video/mp4"}.get(e, "application/octet-stream")
 
 
 def _save(raw: bytes, ext: str, subdir: str = "") -> str:
@@ -288,7 +301,7 @@ async def generate_image(
 async def edit_image(
     ctx: Context,
     prompt: Annotated[str, Field(description="What to change in the image (e.g. 'replace background with sunset', 'make it watercolor style')")],
-    image: Annotated[str, Field(description="Source image: http(s) URL (e.g. from generate_image) | data-URI | 'upload:<name>' | base64. png/jpg")],
+    image: Annotated[str, Field(description="Source image: http(s) URL (e.g. from generate_image) | data-URI | 'upload:<name>' | base64. png/jpg/webp")],
     model: Annotated[str, Field(description="Edit-capable model — see list_media_models().image_edit_models")] = "gemini/gemini-3.1-flash-image",
     size: Annotated[Optional[str], Field(description="Optional output size 'WxH' for openai models")] = None,
 ) -> dict:
@@ -299,8 +312,10 @@ async def edit_image(
     async with httpx.AsyncClient(timeout=120) as c:
         raw = await _resolve_source(image, c)
     mime = _mime_for(raw)
-    if mime not in ("image/png", "image/jpeg"):
-        raise ValueError(f"image must be png/jpg, got {mime}")
+    if mime not in ("image/png", "image/jpeg", "image/webp"):
+        raise ValueError(
+            f"image must be png/jpg/webp — detected {_ext_for(raw)} ({mime}); "
+            f"first bytes: {raw[:8]!r}")
 
     if model == "minimax/image-01":
         body = {"model": "image-01", "prompt": prompt,

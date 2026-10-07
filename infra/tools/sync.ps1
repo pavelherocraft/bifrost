@@ -28,7 +28,7 @@ foreach ($f in $core) {
   if ($f -ne 'crontab.root') { Pull "/opt/litellm/$f" (Join-Path $infra "litellm\$f") }
 }
 Pull '/opt/litellm/README.md' (Join-Path $infra 'litellm\VM_README.md')
-Pull '/etc/nginx/sites-available/litellm-bifrost' (Join-Path $infra 'litellm\nginx\litellm-bifrost.conf')
+Pull '/etc/nginx/sites-enabled/litellm-bifrost' (Join-Path $infra 'litellm\nginx\litellm-bifrost.conf')
 
 # ---------- 2. committed: admin/ (без мусора) ----------
 $admin = @((VM "ls -1 /opt/litellm/admin") -split "`n" | Where-Object { $_.Trim() -match '\.(py|sh|json|html)$' -and $_ -notmatch 'healthcheck\.log|ALERT' })

@@ -620,11 +620,12 @@ router_settings:
     - tencent/Kimi K3 (reserved - use when main is exhausted)
 mcp_servers:
   media:
+    alias: Johnny the Knight MCP
     url: http://172.18.0.1:9101/mcp
     transport: http
     allow_all_keys: true
     extra_headers: ["authorization", "x-litellm-api-key"]
-    description: "Media generation: images, video (MiniMax), TTS, voice clone, ASR"
+    description: "Johnny the Knight MCP — media generation: images, video (MiniMax), TTS, voice clone, ASR"
 
   zai_web_search:
     url: https://api.z.ai/api/mcp/web_search_prime/mcp

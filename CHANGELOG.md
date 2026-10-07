@@ -4,6 +4,44 @@
 
 ---
 
+### [2026-10-07] — media-mcp → «Johnny the Knight MCP» + 4 фикса
+
+**Переименование.** FastMCP-сервер, `alias` в `mcp_servers.media`
+(теперь `initialize` через `/litellm/media/mcp` отдаёт
+`serverInfo.name = "Johnny the Knight MCP"`), карточка на
+setup-странице. URL и tool-namespace не менялись — `media` остаётся
+идентификатором сервера в LiteLLM и в конфигах opencode.
+
+**1) HEAD/GET preflight → 405 вместо 500.** LiteLLM MCP-гейтвей ронял
+любой не-POST метод с 500 — MCP-клиенты с preflight (Hermes Agent) не
+могли подключиться. В nginx добавлен
+`location ~ ^/litellm/([^/]+/)?mcp/?$` с `limit_except POST { deny all; }`
+→ чистый 405 на HEAD/GET/OPTIONS/PUT/DELETE, POST проходит в LiteLLM.
+На бэкап-файлы в `sites-enabled/` не натыкаться — nginx их грузит как
+активный конфиг (поймали `duplicate upstream` при патче).
+
+**2) Image source detection по magic bytes.** `edit_image` /
+`generate_video(first_frame_url)` падали с
+`image must be png/jpg, got application/octet-stream` на URL от
+`/media-upload` (nginx отдаёт octet-stream для файлов без расширения).
+Тип теперь определяется по сигнатуре файла, а не по HTTP-заголовку;
+добавлены webp/gif/bmp и др. `edit_image` принимает png/jpg/webp
+(multipart в `/v1/images/edits`, data-URI в MiniMax `image-01`).
+
+**3) `/v1/videos` + MiniMax-H3 → 403 team_model_access_denied — by design.**
+У LiteLLM нет MiniMax-провайдера для стандартного video API (только
+gemini/azure/runwayml/vertex_ai). MiniMax video живёт в passthrough-
+роутах `/minimax/v[12]/video_generation` и в MCP-тулах — доступ
+регулируется грантом на MCP-сервер, а не на имя модели. Отдельный
+документированный REST-адаптер не добавлялся.
+
+**4) Синк nginx.** `sync.ps1` тянул `sites-available`, который устарел
+с августа (живой конфиг — `sites-enabled`, не симлинк). Теперь тянет
+`sites-enabled`; заодно в снапшот попали накопившиеся правки
+(sub_filter v17, media-files/media-upload locations).
+
+---
+
 ### [2026-10-06] — media-mcp: `video_status` больше не дублирует файлы
 
 Баг: каждый poll таски со статусом `Success` заново скачивал видео и
