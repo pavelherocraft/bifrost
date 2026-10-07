@@ -4,6 +4,42 @@
 
 ---
 
+### [2026-10-08] — mimo-v2.6: убран вариант `max` reasoning_effort (upstream 400)
+
+Проблема: у пользователя спорадически падал `xiaomi/mimo-v2.6-pro` с
+400 «Invalid request parameters» (failure → retry → success). Отловлено
+новым failure-хуком payload_logs: клиент слал `reasoning_effort: "max"`.
+Проверкой upstream подтверждено: Xiaomi принимает только
+`low / medium / high / none`; `xhigh`, `max`, `minimal` → 400.
+
+`max` приходил из `_REASONING_VARIANTS` в `infra/opencode-setup/api.py`
+(варианты генерились по аналогии с Kimi/GLM). Варианты mimo-моделей
+заменены на `off(none) / low / medium / high`; сервис `opencode-api`
+перезапущен на VM. Существующим клиентам: перегенерировать конфиг или
+сменить `reasoningEffort` на `high`.
+
+Заодно проверены остальные reasoning-модели с `max`: Kimi K3,
+Kimi K3-256K, GLM-5.3 (+res), GLM-5.3-Flash (+res), MiniMax-M3,
+MiniMax-M3.1-Flash-Preview (включая `xhigh`), openrouter/deepseek-v4.1-flash,
+stepfun/step-5-preview, stepfun/step-3.5-flash-2603, stepfun/step-3.7-flash
+— все принимают `max` (200). Tencent-резервные модели проверить нельзя:
+upstream-пакет отключён (403 «package is disabled») — они и так спят
+до фолбэка.
+
+### [2026-10-08] — payload_logs_hook v3: логирование падений (full request body)
+
+Хук `/opt/litellm/admin/payload_logs_hook.py` научился
+`async_log_failure_event`: для юзеров из `PayloadLogAllowlist`
+падающие запросы пишутся в `UserRequestLogs` с `event_type='failure'`,
+полным request body (все роли, tools, параметры) и exception-деталями
+в новой колонке `failure_detail` (success-строки по-прежнему хранят
+только user-тексты; failure-строки не влияют на dedupe — `full_texts=NULL`).
+Таблица расширена: `event_type text`, `failure_detail jsonb`.
+Использовано для диагностики mimo-400 выше; allowlist после
+расследования выключен.
+
+---
+
 ### [2026-10-07] — allowed_routes для VS Code LiteLLM extension: info_routes + daily activity
 
 Проблема: LiteLLM-расширение VS Code подключалось, но ругалось на

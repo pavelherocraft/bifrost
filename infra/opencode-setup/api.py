@@ -120,15 +120,19 @@ _REASONING_VARIANTS = {
         "high": {"reasoningEffort": "high"},
         "max":  {"reasoningEffort": "max"},
     },
+    # Xiaomi upstream only accepts low/medium/high/none — xhigh/max get a
+    # bare 400 "Invalid request parameters" (verified 2026-10-08).
     "xiaomi/mimo-v2.6-pro": {
-        "low":  {"reasoningEffort": "low"},
-        "high": {"reasoningEffort": "high"},
-        "max":  {"reasoningEffort": "max"},
+        "off":    {"reasoningEffort": "none"},
+        "low":    {"reasoningEffort": "low"},
+        "medium": {"reasoningEffort": "medium"},
+        "high":   {"reasoningEffort": "high"},
     },
     "xiaomi/mimo-v2.6-flash": {
-        "low":  {"reasoningEffort": "low"},
-        "high": {"reasoningEffort": "high"},
-        "max":  {"reasoningEffort": "max"},
+        "off":    {"reasoningEffort": "none"},
+        "low":    {"reasoningEffort": "low"},
+        "medium": {"reasoningEffort": "medium"},
+        "high":   {"reasoningEffort": "high"},
     },
     "stepfun/step-5-preview": {
         "low":  {"reasoningEffort": "low"},
