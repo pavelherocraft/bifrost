@@ -52,14 +52,16 @@ _REASONING_CAPABLE = {
     "GLM-4.7", "GLM-4.7 (res)",
     "GLM-5.3", "GLM-5.3 (res)",
     "GLM-5.3-Flash", "GLM-5.3-Flash (res)",
-    "tencent/glm-5-2 (reserved - use when main is exhausted)", "tencent/glm-5-3 (reserved - use when main is exhausted)",
+    "tencent/glm-5-3 (reserved - use when main is exhausted)",
     "tencent/glm5-3flash (reserved - use when main is exhausted)",
-    "tencent/DeepSeek-V4.1-Flash",
     "openrouter/deepseek-v4.1-flash",
     "xiaomi/mimo-v2.6-pro", "xiaomi/mimo-v2.6-flash",
+    "tencent/mimo-v2.6-pro (reserved - use when main is exhausted)",
+    "tencent/mimo-v2.6-flash (reserved - use when main is exhausted)",
     "stepfun/step-5-preview", "stepfun/step-3.5-flash-2603", "stepfun/step-3.7-flash",
     "tencent/Kimi K3 (reserved - use when main is exhausted)",
     "tencent/Hy4",
+    "tencent/Hy4 (reserved - use when main is exhausted)",
     "tencent/Hy3",
     "kimi-k2-0905-preview", "kimi-k2-turbo-preview",
     "Kimi K2.6", "Kimi K2.7", "Kimi K3",
@@ -110,10 +112,19 @@ _REASONING_VARIANTS = {
         "high": {"reasoningEffort": "high"},
         "max":  {"reasoningEffort": "max"},
     },
-    "tencent/DeepSeek-V4.1-Flash": {
-        "low":  {"reasoningEffort": "low"},
-        "high": {"reasoningEffort": "high"},
-        "max":  {"reasoningEffort": "max"},
+    # Tencent token-plan mimo has the same limits as xiaomi upstream:
+    # max/xhigh -> 400 (verified 2026-10-08).
+    "tencent/mimo-v2.6-pro (reserved - use when main is exhausted)": {
+        "off":    {"reasoningEffort": "none"},
+        "low":    {"reasoningEffort": "low"},
+        "medium": {"reasoningEffort": "medium"},
+        "high":   {"reasoningEffort": "high"},
+    },
+    "tencent/mimo-v2.6-flash (reserved - use when main is exhausted)": {
+        "off":    {"reasoningEffort": "none"},
+        "low":    {"reasoningEffort": "low"},
+        "medium": {"reasoningEffort": "medium"},
+        "high":   {"reasoningEffort": "high"},
     },
     "openrouter/deepseek-v4.1-flash": {
         "low":  {"reasoningEffort": "low"},

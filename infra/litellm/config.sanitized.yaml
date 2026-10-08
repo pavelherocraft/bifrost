@@ -24,11 +24,6 @@ litellm_settings:
       output_cost_per_token: 1.2e-06
       cache_read_input_token_cost: 1.0e-08
       litellm_provider: custom_openai
-    tencent/DeepSeek-V4.1-Flash:
-      input_cost_per_token: 3.0e-07
-      output_cost_per_token: 1.2e-06
-      cache_read_input_token_cost: 1.0e-08
-      litellm_provider: custom_openai
     glm-5.3-flash:
       input_cost_per_token: 1.5e-07
       output_cost_per_token: 5.0e-07
@@ -456,6 +451,18 @@ litellm_settings:
       input_cost_per_token: 3.0e-06
       output_cost_per_token: 1.5e-05
       cache_read_input_token_cost: 3.0e-07
+    tencent/Hy4 (reserved - use when main is exhausted):
+      input_cost_per_token: 8.34e-07
+      output_cost_per_token: 2.501e-06
+      cache_read_input_token_cost: 4.2e-08
+    tencent/mimo-v2.6-pro (reserved - use when main is exhausted):
+      input_cost_per_token: 4.35e-07
+      output_cost_per_token: 8.7e-07
+      cache_read_input_token_cost: 3.6e-09
+    tencent/mimo-v2.6-flash (reserved - use when main is exhausted):
+      input_cost_per_token: 1.4e-07
+      output_cost_per_token: 2.8e-07
+      cache_read_input_token_cost: 2.8e-09
     openrouter/deepseek/deepseek-v4.1-flash:
       input_cost_per_token: 3.0e-07
       output_cost_per_token: 1.2e-06
@@ -618,6 +625,12 @@ router_settings:
     - tencent/glm5-3flash (reserved - use when main is exhausted)
   - Kimi K3:
     - tencent/Kimi K3 (reserved - use when main is exhausted)
+  - tencent/Hy4:
+    - tencent/Hy4 (reserved - use when main is exhausted)
+  - xiaomi/mimo-v2.6-pro:
+    - tencent/mimo-v2.6-pro (reserved - use when main is exhausted)
+  - xiaomi/mimo-v2.6-flash:
+    - tencent/mimo-v2.6-flash (reserved - use when main is exhausted)
 mcp_servers:
   media:
     alias: Johnny the Knight MCP

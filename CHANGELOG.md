@@ -4,6 +4,40 @@
 
 ---
 
+### [2026-10-08] — Tencent token-plan: новый ключ, reserved Hy4/mimo + fallbacks
+
+Токен-план Tencent (base `tokenhub-intl.tencentcloudmaas.com/plan/v3`)
+переехал на новый API-ключ (старый умер вместе с планом). PAYG-подключение
+(`tencent/Hy3`, `tencent/Hy4`, base `/v1`) не тронуто.
+
+Деплойменты:
+- Ключ обновлён: `tencent/glm-5-3 (reserved)`, `tencent/glm5-3flash (reserved)`,
+  `tencent/Kimi K3 (reserved)`, `tencent/deepseek-v4-pro-0813`
+- Удалены: `tencent/DeepSeek-V4.1-Flash`, `tencent/deepseek-v4-flash-0731`,
+  `tencent/glm-5-2 (reserved)` (+ из списков команд, api.py, model_cost)
+- Созданы: `tencent/Hy4 (reserved)` → `hy4-preview`,
+  `tencent/mimo-v2.6-pro (reserved)` → `mimo-v2.6-pro`,
+  `tencent/mimo-v2.6-flash (reserved)` → `mimo-v2.6-flash`
+  (model_info скопирован с основных аналогов)
+
+Fallbacks (router_settings):
+- `tencent/Hy4` → `tencent/Hy4 (reserved)`
+- `xiaomi/mimo-v2.6-pro` → `tencent/mimo-v2.6-pro (reserved)` — раньше у mimo
+  фолбэков не было
+- `xiaomi/mimo-v2.6-flash` → `tencent/mimo-v2.6-flash (reserved)`
+- GLM-цепочки уже содержали tencent третьим — без изменений
+
+model_cost: добавлены 3 reserved-имени (те же цены, что у основных).
+Списки команд: новые reserved-имена добавлены командам, у которых есть
+соответствующие основные модели.
+
+Upstream-проверка reasoning_effort на tencent-plan: mimo отвергает
+max/xhigh (400) как и xiaomi → в `_REASONING_VARIANTS` reserved-mimo
+получили `off/low/medium/high`. hy4-preview: xhigh OK / max 400;
+glm-5-3: max OK / xhigh 400; glm-5.3-flash и kimi-k3: оба OK.
+
+---
+
 ### [2026-10-08] — mimo-v2.6: убран вариант `max` reasoning_effort (upstream 400)
 
 Проблема: у пользователя спорадически падал `xiaomi/mimo-v2.6-pro` с
