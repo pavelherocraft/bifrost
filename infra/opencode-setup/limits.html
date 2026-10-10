@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Лимиты — Bifrost LiteLLM</title>
+<style>
+  :root{
+    --bg:#0b0d12; --panel:#12151d; --panel2:#161a24; --border:#232838;
+    --border-hi:#2e3648; --text:#e7ebf3; --muted:#8b93a7; --dim:#5d6577;
+    --accent:#6366f1; --accent2:#818cf8; --accent-bg:rgba(99,102,241,.12);
+    --green:#10b981; --green-bg:rgba(16,185,129,.12);
+    --amber:#f59e0b; --amber-bg:rgba(245,158,11,.12);
+    --red:#ef4444; --red-bg:rgba(239,68,68,.1);
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);padding:0 20px 80px;line-height:1.55;
+    background-image:radial-gradient(900px 300px at 50% -80px,rgba(99,102,241,.13),transparent 70%)}
+  .wrap{max-width:900px;margin:0 auto}
+  header{padding:36px 0 8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .logo{width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#6366f1,#a855f7);
+    display:flex;align-items:center;justify-content:center;font-size:21px;box-shadow:0 4px 24px rgba(99,102,241,.35)}
+  h1{font-size:22px;letter-spacing:-.02em}
+  .sub{color:var(--muted);font-size:13px;margin-top:2px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px 22px;margin-top:16px}
+  .card>h2{font-size:15px;display:flex;align-items:center;gap:9px;margin-bottom:10px;letter-spacing:-.01em}
+  .card p{color:var(--muted);font-size:13.5px}
+  .card code{font-family:var(--mono);font-size:12px;background:rgba(255,255,255,.06);padding:2px 6px;border-radius:4px;color:#c9d1e3}
+  .chips{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 2px}
+  .chip{font-family:var(--mono);font-size:11.5px;background:var(--panel2);border:1px solid var(--border);
+    color:var(--muted);padding:3px 9px;border-radius:999px}
+  .win{margin-top:14px;padding:14px 16px;background:var(--panel2);border:1px solid var(--border);border-radius:12px}
+  .win-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+  .win-name{font-weight:600;font-size:13px}
+  .win-sub{font-size:12px;color:var(--dim)}
+  .bar{height:10px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden;border:1px solid var(--border)}
+  .bar>i{display:block;height:100%;border-radius:999px;transition:width .4s}
+  .pct{font-size:22px;font-weight:700;letter-spacing:-.02em}
+  .meta{display:flex;gap:16px;margin-top:8px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+  .meta b{color:var(--text)}
+  .err{color:var(--red);font-size:13px}
+  .empty{color:var(--dim);text-align:center;padding:40px 10px;font-size:14px}
+  .lookup{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+  input[type=text]{flex:1;min-width:260px;background:var(--panel2);border:1px solid var(--border-hi);border-radius:10px;
+    color:var(--text);padding:10px 14px;font-family:var(--mono);font-size:12.5px;outline:none}
+  input[type=text]:focus{border-color:var(--accent)}
+  button{background:linear-gradient(135deg,#6366f1,#7c3aed);color:#fff;border:0;padding:10px 20px;border-radius:10px;
+    font-size:13.5px;font-weight:600;cursor:pointer}
+  button:hover{filter:brightness(1.12)}
+  .g{color:var(--green)} .a{color:var(--amber)} .r{color:var(--red)}
+  .fill-g{background:linear-gradient(90deg,#059669,#10b981)}
+  .fill-a{background:linear-gradient(90deg,#d97706,#f59e0b)}
+  .fill-r{background:linear-gradient(90deg,#dc2626,#ef4444)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">📊</div>
+    <div>
+      <h1>Лимиты токен-планов</h1>
+      <div class="sub">Остатки квот по планам, доступным твоему ключу</div>
+    </div>
+  </header>
+
+  <div class="card">
+    <div class="lookup">
+      <input id="q" type="text" placeholder="sk-… ключ или user_id (UUID)">
+      <button onclick="load()">Показать</button>
+    </div>
+  </div>
+
+  <div id="out"></div>
+</div>
+
+<script>
+var $ = function(id){ return document.getElementById(id); };
+
+function qs(){
+  var p = new URLSearchParams(location.search);
+  return { user: p.get("user") || p.get("user_id") || "",
+           vk: p.get("vk") || "", vkh: p.get("vkh") || "" };
+}
+
+function fmtDur(ms){
+  if(ms == null) return "—";
+  var s = Math.max(0, Math.round(ms/1000));
+  var d = Math.floor(s/86400); s -= d*86400;
+  var h = Math.floor(s/3600);  s -= h*3600;
+  var m = Math.floor(s/60);
+  if(d > 0) return d + " д " + h + " ч";
+  if(h > 0) return h + " ч " + m + " мин";
+  return m + " мин";
+}
+
+function fmtTs(ms){
+  if(!ms) return "—";
+  var d = new Date(ms);
+  return d.toLocaleString("ru-RU", {day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
+}
+
+function pctClass(p){
+  if(p == null) return "g";
+  if(p <= 10) return "r";
+  if(p <= 30) return "a";
+  return "g";
+}
+
+function winHtml(title, w){
+  var p = w.remaining_percent;
+  var cls = pctClass(p);
+  var pctTxt = (p == null) ? "—" : p + "%";
+  var counts = "";
+  if(w.total_count){
+    var used = (w.usage_count != null) ? w.usage_count : "—";
+    counts = "<div><b>" + used + "</b> / " + w.total_count + " использовано</div>";
+  }
+  return '<div class="win">' +
+    '<div class="win-head"><span class="win-name">' + title + '</span>' +
+    '<span class="pct ' + cls + '">' + pctTxt + '</span></div>' +
+    '<div class="bar"><i class="fill-' + cls + '" style="width:' + (p || 0) + '%"></i></div>' +
+    '<div class="meta">' + counts +
+    '<div>сброс через <b>' + fmtDur(w.resets_in_ms) + '</b></div>' +
+    '<div>до <b>' + fmtTs(w.end_time) + '</b></div>' +
+    '</div></div>';
+}
+
+function providerHtml(pr){
+  var h = '<div class="card"><h2><span class="ico">🧩</span>' + pr.label + '</h2>';
+  h += '<div class="chips">' + pr.models.map(function(m){
+    return '<span class="chip">' + m + '</span>'; }).join('') + '</div>';
+  if(pr.error){
+    h += '<p class="err">⚠ ' + pr.error + '</p>';
+  } else if(pr.windows && pr.windows.length){
+    pr.windows.forEach(function(w){
+      if(pr.windows.length > 1)
+        h += '<div class="win-sub" style="margin-top:10px">План: <b style="color:var(--text)">' + w.name + '</b></div>';
+      h += winHtml("5-часовое окно", w.interval) + winHtml("Недельное окно", w.weekly);
+    });
+  } else {
+    h += '<p class="empty">Нет данных по квоте</p>';
+  }
+  return h + '</div>';
+}
+
+function load(){
+  var out = $("out");
+  var params = qs();
+  var input = $("q").value.trim();
+  var query = "";
+  if(input){
+    query = input.indexOf("sk-") === 0 || input.indexOf("hkg-") === 0
+      ? "vk=" + encodeURIComponent(input)
+      : "user=" + encodeURIComponent(input);
+  } else if(params.vk)  query = "vk="   + encodeURIComponent(params.vk);
+  else if(params.vkh)   query = "vkh="  + encodeURIComponent(params.vkh);
+  else if(params.user)  query = "user=" + encodeURIComponent(params.user);
+  if(!query){
+    out.innerHTML = '<div class="card"><p class="empty">Введи ключ (sk-…) или user_id, либо открой страницу с параметром ?user= / ?vk=</p></div>';
+    return;
+  }
+  out.innerHTML = '<div class="card"><p class="empty">Загружаю…</p></div>';
+  fetch("/setup-opencode/api/limits?" + query)
+    .then(function(r){ return r.json().then(function(j){ return {code:r.status, body:j}; }); })
+    .then(function(res){
+      var b = res.body;
+      if(res.code !== 200 || b.error){
+        out.innerHTML = '<div class="card"><p class="err">⚠ ' + (b.error || ("HTTP " + res.code)) + '</p></div>';
+        return;
+      }
+      if(!b.providers || !b.providers.length){
+        out.innerHTML = '<div class="card"><p class="empty">По доступным тебе моделям нет токен-планов с отслеживаемыми лимитами.</p></div>';
+        return;
+      }
+      out.innerHTML = b.providers.map(providerHtml).join("");
+    })
+    .catch(function(e){
+      out.innerHTML = '<div class="card"><p class="err">⚠ ' + e + '</p></div>';
+    });
+}
+
+load();
+</script>
+</body>
+</html>

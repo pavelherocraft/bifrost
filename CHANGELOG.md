@@ -4,6 +4,28 @@
 
 ---
 
+### [2026-10-11] — Страница «Лимиты»: остатки токен-планов (MiniMax)
+
+Новая страница `/setup-opencode/limits.html` + endpoint
+`GET /limits` в opencode-api: показывает остаток квот токен-планов,
+доступных ключу/юзеру (фильтрация провайдеров по resolved models).
+
+- **MiniMax Token Plan** — первый провайдер. Данные через новый
+  passthrough `/minimax/v1/token_plan/remains` → `api.minimax.io`
+  (config.yaml, ключ плана переиспользуется). Отдаёт unified bar:
+  5-часовое и недельное окна, `remaining_percent` + время до сброса
+- Passthrough требует реальный VK (master key заблокирован и там):
+  при `?vk=` — ключ вызывающего, при `?user=`/`?vkh=` — короткий
+  probe-ключ (2 мин, создаётся и удаляется в рамках запроса)
+- Кнопка «📊 Лимиты» в LiteLLM UI над «Мои настройки»
+  (users-btn.js, openPage-helper)
+- Реестр `_LIMIT_PROVIDERS` в api.py расширяем под tencent/aliyun
+
+Проверено end-to-end: user/vkh-пути отдают живые проценты,
+probe-ключи не остаются в БД, страница открывается кнопкой.
+
+---
+
 ### [2026-10-10] — opencode-setup: карточки Mistral/GigaChat + метаданные, reasoning-варианты, фильтр embedding
 
 В гайд «Какую модель выбрать» добавлены карточки: mistral-large-4

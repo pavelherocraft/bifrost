@@ -114,11 +114,15 @@
   }
 
   function openSetup(uid){
+    openPage("/setup-opencode/", uid);
+  }
+
+  function openPage(path, uid){
     if(!uid || !UUID_RE.test(uid)){
-      log("openSetup: refused non-UUID uid:", uid);
+      log("openPage: refused non-UUID uid:", uid);
       return;
     }
-    window.open("/setup-opencode/?user=" + encodeURIComponent(uid), "_blank", "noopener");
+    window.open(path + "?user=" + encodeURIComponent(uid), "_blank", "noopener");
   }
 
   // ---- FAB (floating action button) ----
@@ -136,6 +140,14 @@
     fab.setAttribute("data-oc-injected", "1");
     fab.style.cssText = "position:fixed!important;right:18px!important;bottom:60px!important;z-index:2147483647!important;display:flex!important;flex-direction:column!important;gap:6px!important;align-items:flex-end!important;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif!important;pointer-events:auto!important;";
 
+    var limRow = document.createElement("div");
+    limRow.style.cssText = "display:flex!important;align-items:center!important;gap:6px!important;";
+    var limBtn = document.createElement("button");
+    limBtn.type = "button";
+    limBtn.textContent = "\uD83D\uDCCA Лимиты";
+    limBtn.style.cssText = "background:#0e7c5f!important;color:#fff!important;border:0!important;padding:10px 16px!important;border-radius:999px!important;font-size:13px!important;font-weight:600!important;cursor:pointer!important;box-shadow:0 4px 14px rgba(0,0,0,.4)!important;white-space:nowrap!important;font-family:inherit!important;";
+    limRow.appendChild(limBtn);
+
     var btnRow = document.createElement("div");
     btnRow.style.cssText = "display:flex!important;align-items:center!important;gap:6px!important;";
 
@@ -152,6 +164,7 @@
     clear.style.cssText = "background:#2a2f3a!important;color:#fff!important;border:0!important;width:24px!important;height:24px!important;border-radius:50%!important;font-size:12px!important;line-height:1!important;cursor:pointer!important;display:none!important;align-items:center!important;justify-content:center!important;font-family:inherit!important;";
     btnRow.appendChild(clear);
 
+    fab.appendChild(limRow);
     fab.appendChild(btnRow);
 
     var uidLabel = document.createElement("div");
@@ -180,9 +193,7 @@
       showClear(false);
     }
 
-    btn.addEventListener("click", function(ev){
-      ev.preventDefault();
-      ev.stopPropagation();
+    function pickUidAndOpen(openFn){
       var currentSaved = getSavedUid();
       cacheValid = false;
       var currentDetected = detectUid(true);
@@ -192,7 +203,7 @@
           saveUid(finalUid);
           showClear(true);
         }
-        openSetup(finalUid);
+        openFn(finalUid);
       } else {
         var input = prompt("Не удалось автоматически определить твой user_id.\nВведи его вручную (UUID). Его можно найти в правом верхнем углу LiteLLM — блок с профилем пользователя.");
         if(input && input.trim().length >= 8){
@@ -200,9 +211,21 @@
           saveUid(input);
           showUid(input);
           showClear(true);
-          openSetup(input);
+          openFn(input);
         }
       }
+    }
+
+    btn.addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      pickUidAndOpen(openSetup);
+    });
+
+    limBtn.addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      pickUidAndOpen(function(uid){ openPage("/setup-opencode/limits.html", uid); });
     });
 
     clear.addEventListener("click", function(ev){
@@ -255,8 +278,8 @@
     var saved = getSavedUid();
     var detected = cachedUid;
     var finalUid = saved || detected;
-    var uidLabel = fab.children[1];
-    var btnRow = fab.children[0];
+    var uidLabel = fab.children[2];
+    var btnRow = fab.children[1];
     var clearBtn = btnRow.children[1];
     if(uidLabel){
       if(finalUid){

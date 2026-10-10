@@ -21,6 +21,9 @@ Endpoints
   GET /mcp?vkh=<sha256>        -> resolves VK by key hash -> user_id, then 200
   GET /vk-info?vk=sk-...       -> 200 {"user_id","key_alias","team_id"} or 404
   GET /vk-info?vkh=<sha256>    -> same shape, looked up by key hash
+  GET /limits?user|vk|vkh=...  -> 200 {"providers":[{id,label,models,windows}]}
+                                 remaining token-plan quota for providers the
+                                 key/user actually has models for
   GET /health                  -> 200 {"ok": true}
 """
 import json
@@ -211,6 +214,58 @@ _REASONING_VARIANTS = {
 # makes opencode offer a model that always fails).
 _BLOCKED_MODES = {"embedding", "audio_transcription", "audio_speech"}
 
+# Token-plan providers whose remaining quota can be reported on the limits
+# page. Each provider is reachable through a LiteLLM passthrough endpoint
+# (the upstream plan key lives in config.yaml — we never touch it here).
+# `models` = deployment names that ride this plan; a provider is only
+# reported when the caller's resolved model set intersects it.
+# `normalize` maps the upstream response to a common window shape:
+#   [{"name": ..., "interval": {...}, "weekly": {...}}]
+def _norm_minimax_remains(raw):
+    """MiniMax /v1/token_plan/remains -> normalized window list.
+
+    Upstream gives per-"model" rows (in practice one "general" unified bar)
+    with current_* (5-hour rolling window) and weekly_* fields. Counts are
+    zero in the new API — percent fields carry the real info:
+    current_interval_remaining_percent / current_weekly_remaining_percent.
+    """
+    out = []
+    for e in raw.get("model_remains") or []:
+        out.append({
+            "name": e.get("model_name") or "general",
+            "interval": {
+                "remaining_percent": e.get("current_interval_remaining_percent"),
+                "status": e.get("current_interval_status"),
+                "total_count": e.get("current_interval_total_count"),
+                "usage_count": e.get("current_interval_usage_count"),
+                "resets_in_ms": e.get("remains_time"),
+                "end_time": e.get("end_time"),
+            },
+            "weekly": {
+                "remaining_percent": e.get("current_weekly_remaining_percent"),
+                "status": e.get("current_weekly_status"),
+                "total_count": e.get("current_weekly_total_count"),
+                "usage_count": e.get("current_weekly_usage_count"),
+                "resets_in_ms": e.get("weekly_remains_time"),
+                "end_time": e.get("weekly_end_time"),
+            },
+        })
+    return out
+
+
+_LIMIT_PROVIDERS = {
+    "minimax": {
+        "label": "MiniMax Token Plan",
+        "models": {
+            "MiniMax-M2.1-highspeed", "MiniMax-M2.5", "MiniMax-M2.5-highspeed",
+            "MiniMax-M2.7", "MiniMax-M2.7 (res)", "MiniMax-M2.7-highspeed",
+            "MiniMax-M3", "Minimax-M3", "MiniMax-M3.1-Flash-Preview",
+        },
+        "endpoint": "/minimax/v1/token_plan/remains",
+        "normalize": _norm_minimax_remains,
+    },
+}
+
 # Models that support image generation (text-to-image) via /v1/images/generations.
 # Litellm model_info.mode == 'image_generation' identifies these.
 # All image models in DB currently have mode = 'image_generation' (set during
@@ -257,6 +312,54 @@ def litellm_get(path):
     )
     with urllib.request.urlopen(req, timeout=10) as r:
         return json.loads(r.read())
+
+
+def litellm_post(path, payload):
+    key = load_master_key()
+    req = urllib.request.Request(
+        LITELLM_BASE + path,
+        data=json.dumps(payload).encode(),
+        headers={"Authorization": "Bearer " + key,
+                 "Content-Type": "application/json",
+                 "Accept": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.loads(r.read())
+
+
+def _passthrough_get(path, vk_token):
+    """Call a LiteLLM passthrough endpoint authenticated by a real VK.
+
+    Passthrough routes reject the master key (block_master_key_hook), so we
+    must authenticate with an actual virtual key — either the caller's own
+    or a short-lived probe key created on the fly.
+    """
+    req = urllib.request.Request(
+        LITELLM_BASE + path,
+        headers={"Authorization": "Bearer " + vk_token,
+                 "Accept": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.loads(r.read())
+
+
+def _create_probe_key(user_id):
+    """Short-lived VK used to authenticate passthrough quota lookups when the
+    caller came in by ?user= (no raw VK at hand). Deleted right after use."""
+    doc = litellm_post("/key/generate", {
+        "user_id": user_id,
+        "duration": "2m",
+        "key_alias": "limits-probe",
+    })
+    return doc.get("key")
+
+
+def _delete_key(token):
+    try:
+        litellm_post("/key/delete", {"keys": [token]})
+    except Exception:
+        pass
 
 
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
@@ -815,6 +918,52 @@ class Handler(BaseHTTPRequestHandler):
                     raise
                 return self._send(200, {"servers": servers,
                                         "resolved_via": ctx["via"]})
+
+            if u.path == "/limits":
+                qs = urllib.parse.parse_qs(u.query)
+                try:
+                    uid, ctx = resolve_target(qs)
+                except ValueError as e:
+                    return self._send(400, {"error": str(e)})
+                except LookupError as e:
+                    return self._send(404, {"error": str(e)})
+                try:
+                    models = resolve_models(uid)
+                except urllib.error.HTTPError as e:
+                    if e.code == 404:
+                        return self._send(404, {"error": "user not found"})
+                    raise
+                ids = {m["id"] for m in models}
+
+                # Passthrough quota endpoints need a real VK — master key is
+                # blocked on them. Use the caller's VK when present, else a
+                # probe key created and deleted within this request.
+                vk_token = ctx.get("vk")
+                probe = None
+                providers = []
+                try:
+                    for pid, p in _LIMIT_PROVIDERS.items():
+                        avail = sorted(ids & p["models"])
+                        if not avail:
+                            continue
+                        entry = {"id": pid, "label": p["label"],
+                                 "models": avail}
+                        try:
+                            if not vk_token:
+                                probe = probe or _create_probe_key(uid)
+                                vk_token = probe
+                            raw = _passthrough_get(p["endpoint"], vk_token)
+                            entry["windows"] = p["normalize"](raw)
+                        except Exception as e:
+                            entry["error"] = f"{type(e).__name__}: {e}"
+                        providers.append(entry)
+                finally:
+                    if probe:
+                        _delete_key(probe)
+                body = {"providers": providers, "resolved_via": ctx["via"]}
+                if ctx.get("user_id"):
+                    body["user_id"] = ctx["user_id"]
+                return self._send(200, body)
 
             self._send(404, {"error": "not found"})
         except Exception as e:
