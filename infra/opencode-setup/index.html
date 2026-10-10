@@ -190,6 +190,20 @@
         <div class="mdesc">Второй флагман, тоже дорого. Смотрит на задачи под другим углом, чем qwen — отлично для ревью кода и разбора сложных мест.</div></div>
       <div class="mcard"><div class="mhead"><span class="mname">GLM-5.3</span><span class="tier t-strong">продвинутый инженер</span></div>
         <div class="mdesc">Решает сложные задачи — архитектура, коварные баги, планирование, — но до флагманов не дотягивает. Заметно дешевле их.</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">mistral/mistral-large-4</span><span class="tier t-flag">триллион параметров</span></div>
+        <div class="mdesc">Флагман Mistral: 1.05T параметров (52B активных), 1M контекст, vision — при ценнике рабочей лошадки ($0.68/$2.09). Думает по умолчанию; вариант <code>off</code> — быстрые ответы без reasoning.</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">mistral/mistral-medium-3.5</span><span class="tier t-strong">агентная</span></div>
+        <div class="mdesc">128B dense-гибрид: instruct + reasoning + код в одной модели. Заточена под агентные сценарии и multi-tool calling. Дорогой выход ($7.5/1M) — держи <code>off</code> для простых задач.</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">mistral/mistral-small-2603</span><span class="tier t-cheap">дёшево+думает</span></div>
+        <div class="mdesc">Small 4: 119B MoE (6.5B активных) — Magistral + Pixtral + Devstral в одной модели за $0.15/$0.6. Vision, 256K, переключатель <code>off</code>/<code>high</code> решает — думать или нет.</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">gigachat/GigaChat-3-Ultra</span><span class="tier t-cheap">бесплатная · RU</span></div>
+        <div class="mdesc">Freemium-модель Сбера: 128K, родной русский — и бесплатно (в рамках PERS-квоты). Хороша для русскоязычных текстов и документов. Нюанс: один function call за запрос — как агент ограничена.</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">gigachat/GigaChat-2-Max</span><span class="tier t-work">мультимодал · RU</span></div>
+        <div class="mdesc">Флагман GigaChat 2: понимает картинки и <b>аудиофайлы</b> на вход, лучший в линейке по биологии/химии/физике и длинным русским текстам.</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">gigachat/GigaChat-2-Pro</span><span class="tier t-work">баланс · RU</span></div>
+        <div class="mdesc">Средняя GigaChat: суммаризация, рерайт, экономика и юриспруденция. Тоже принимает картинки и аудио.</div></div>
+      <div class="mcard"><div class="mhead"><span class="mname">gigachat/GigaChat-2-Lite</span><span class="tier t-cheap">копеечная</span></div>
+        <div class="mdesc">Самая дешёвая модель шлюза (~65₽/1M): рутинные русскоязычные задачи, быстрые ответы. Текст-only.</div></div>
       <div class="mcard"><div class="mhead"><span class="mname">MiniMax-M3</span><span class="tier t-work">устаревшая лошадка</span></div>
         <div class="mdesc">Ветеран MiniMax: стабильная, проверенная, с 5 уровнями thinking (включая <code>max</code>) — но уже устарела. Для старта лучше бери <b>MiniMax-M3.1-Flash-Preview</b>: свежее, быстрее и с мультимодалом.</div></div>
       <div class="mcard"><div class="mhead"><span class="mname">MiniMax-M3.1-Flash-Preview</span><span class="tier t-cheap">новая · быстрая</span></div>
@@ -225,7 +239,7 @@
       <div class="mcard"><div class="mhead"><span class="mname">highspeed</span><span class="tier t-cheap">ускоренные</span></div>
         <div class="mdesc">MiniMax-M2.x-highspeed — те же модели, но со значительно более быстрым инференсом.</div></div>
     </div>
-    <p style="margin-top:12px;font-size:12.5px">Рекомендации: простые задачи — <b>MiniMax-M3.1-Flash-Preview</b> (дёшево) · посерьёзнее — <b>stepfun/step-5-preview</b>, <b>GLM-5.3-Flash</b> или <b>xiaomi/mimo-v2.6-flash</b> · важные и сложные — <b>tencent/Hy4</b>, <b>GLM-5.3</b> · максимум качества — <b>Kimi K3</b> и <b>qwen3.8-max</b>.</p>
+    <p style="margin-top:12px;font-size:12.5px">Рекомендации: простые задачи — <b>MiniMax-M3.1-Flash-Preview</b> (дёшево) или <b>mistral/mistral-small-2603</b> · посерьёзнее — <b>stepfun/step-5-preview</b>, <b>GLM-5.3-Flash</b> или <b>xiaomi/mimo-v2.6-flash</b> · важные и сложные — <b>tencent/Hy4</b>, <b>GLM-5.3</b>, <b>mistral/mistral-large-4</b> · максимум качества — <b>Kimi K3</b> и <b>qwen3.8-max</b> · русскоязычные тексты и аудио — <b>gigachat</b>-модели.</p>
   </div>
 
   <!-- ==================== КАРТИНКИ ==================== -->

@@ -4,7 +4,15 @@
 
 ---
 
-### [2026-10-10] — opencode-setup: метаданные GigaChat/Mistral, reasoning-варианты, фильтр embedding
+### [2026-10-10] — opencode-setup: карточки Mistral/GigaChat + метаданные, reasoning-варианты, фильтр embedding
+
+В гайд «Какую модель выбрать» добавлены карточки: mistral-large-4
+(триллион параметров), mistral-medium-3.5 (агентная),
+mistral-small-2603 (дёшево+думает), gigachat 3-Ultra (бесплатная·RU),
+2-Max/2-Pro (мультимодал·RU, аудио-вход), 2-Lite (копеечная).
+Строка рекомендаций дополнена mistral и gigachat.
+
+Проверка `/models` opencode-setup для новых провайдеров вскрыла и исправила:
 
 Проверка `/models` opencode-setup для новых провайдеров вскрыла и исправила:
 
