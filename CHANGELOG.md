@@ -15,7 +15,12 @@
   для физлиц) — выдан **всем 12 командам**
 - `gigachat/GigaChat-2-Max`, `gigachat/GigaChat-2-Pro` → основной
   `gigachat.devices.sberbank.ru` — выданы команде **Agents**
-- `model_info`: ctx 128K, цены $0 (freemium PERS)
+- `gigachat/GigaChat-2-Lite` (upstream `GigaChat-2`) — команда **Agents**
+
+Цены (`model_info`, официальный прайс Сбера ₽/1M → $ по ~80₽/$,
+единый тариф вход=выход): Lite $0.81/1M, Pro $6.25/1M, Max $8.13/1M,
+Ultra $0 (freemium). В SpendLogs фигурирует upstream-имя
+(`gigachat/GigaChat-2` = Lite и т.д.) — списание проверено.
 
 Проверено живым прогоном через прокси: все 3 модели → 200.
 Рестарт не потребовался — роутер подхватил деплойменты из БД сам.
