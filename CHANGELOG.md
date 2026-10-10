@@ -4,6 +4,24 @@
 
 ---
 
+### [2026-10-10] — Mistral API подключён (Large 4 / Medium 3.5 / Small 4 / Codestral Embed)
+
+Нативный `mistral`-провайдер LiteLLM, ключ La Plateforme зашифрован
+в `litellm_params` как обычно.
+
+Деплойменты (цены из встроенной карты LiteLLM):
+- `mistral/mistral-large-4` — $0.68/$2.09 за 1M, контекст 1M —
+  **все 12 команд** (reasoning-модель: отдаёт reasoning_content)
+- `mistral/mistral-medium-3.5` — $1.5/$7.5, 262K — **Agents**
+- `mistral/mistral-small-2603` (Small 4) — $0.15/$0.6, 262K — **Agents**
+- `mistral/codestral-embed` — $0.15/1M вход, embedding mode — **Agents**
+  (проверено: `/v1/embeddings` отдаёт 1536-мерные векторы)
+
+Все модели проверены живым прогоном через прокси → 200.
+Синк деплойментов из БД — ~1 минута без рестарта.
+
+---
+
 ### [2026-10-10] — GigaChat + дневные лимиты медиа-генераций в MCP
 
 **GigaChat (Sber).** Подключён нативный `gigachat`-провайдер LiteLLM
