@@ -107,7 +107,7 @@ function pctClass(p){
   return "g";
 }
 
-function winHtml(title, w){
+function barRow(title, w){
   var p = w.remaining_percent;
   var cls = pctClass(p);
   var pctTxt = (p == null) ? "—" : p + "%";
@@ -116,14 +116,20 @@ function winHtml(title, w){
     var used = (w.usage_count != null) ? w.usage_count : "—";
     counts = "<div><b>" + used + "</b> / " + w.total_count + " использовано</div>";
   }
-  return '<div class="win">' +
-    '<div class="win-head"><span class="win-name">' + title + '</span>' +
+  return '<div class="win-head"><span class="win-name">' + title + '</span>' +
     '<span class="pct ' + cls + '">' + pctTxt + '</span></div>' +
     '<div class="bar"><i class="fill-' + cls + '" style="width:' + (p || 0) + '%"></i></div>' +
-    '<div class="meta">' + counts +
+    '<div class="meta" style="margin-bottom:14px">' + counts +
     '<div>сброс через <b>' + fmtDur(w.resets_in_ms) + '</b></div>' +
     '<div>до <b>' + fmtTs(w.end_time) + '</b></div>' +
-    '</div></div>';
+    '</div>';
+}
+
+function winHtml(w){
+  return '<div class="win">' +
+    barRow("5-часовое окно", w.interval) +
+    barRow("Недельное окно", w.weekly) +
+    '</div>';
 }
 
 function providerHtml(pr){
@@ -136,7 +142,7 @@ function providerHtml(pr){
     pr.windows.forEach(function(w){
       if(pr.windows.length > 1)
         h += '<div class="win-sub" style="margin-top:10px">План: <b style="color:var(--text)">' + w.name + '</b></div>';
-      h += winHtml("5-часовое окно", w.interval) + winHtml("Недельное окно", w.weekly);
+      h += winHtml(w);
     });
   } else {
     h += '<p class="empty">Нет данных по квоте</p>';
