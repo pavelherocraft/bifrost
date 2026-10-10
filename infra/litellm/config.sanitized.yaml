@@ -612,6 +612,31 @@ general_settings:
     methods:
     - GET
     timeout: 60
+  - path: /zai/api/monitor/usage/quota/limit
+    target: https://api.z.ai/api/monitor/usage/quota/limit
+    headers:
+      Authorization: Bearer <MASKED>
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) hcproxy/1.0
+    methods:
+    - GET
+    timeout: 60
+  - path: /zaires/api/monitor/usage/quota/limit
+    target: https://api.z.ai/api/monitor/usage/quota/limit
+    headers:
+      Authorization: Bearer <MASKED>
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) hcproxy/1.0
+    methods:
+    - GET
+    timeout: 60
+  - path: /kimi/coding/v1/usages
+    target: https://api.kimi.com/coding/v1/usages
+    headers:
+      Authorization: Bearer <MASKED>
+      Accept: application/json
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) hcproxy/1.0
+    methods:
+    - GET
+    timeout: 60
 router_settings:
   num_retries: 2
   timeout: 300

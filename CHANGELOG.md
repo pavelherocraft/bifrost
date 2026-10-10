@@ -4,6 +4,30 @@
 
 ---
 
+### [2026-10-11] — «Лимиты»: добавлены GLM (Z.AI ×2) и Kimi Code
+
+Страница лимитов теперь показывает три плана помимо MiniMax:
+
+- **GLM Coding Plan (Z.AI)** — основной аккаунт (GLM-5.3, GLM-5.3-Flash).
+  Passthrough `/zai/api/monitor/usage/quota/limit` → `api.z.ai`.
+  `limits[]`: `TOKENS_LIMIT unit=3` → 5-часовое окно, `unit=6` → недельное
+  (`percentage` — доля ИЗРАСХОДОВАННОГО, нормализуем в остаток),
+  `TIME_LIMIT unit=5` → месячный бюджет поиска/ридеров (третий бар
+  «Поиск и ридеры (месяц)» на странице), `level` — тир плана
+- **GLM Coding Plan (Z.AI, резерв)** — второй аккаунт для `(res)`-
+  деплойментов. Passthrough `/zaires/...` с ключом резервного аккаунта.
+  Показывается всем с доступом к GLM-5.3* — это их fallback
+- **Kimi Code** — `GET api.kimi.com/coding/v1/usages` через passthrough
+  `/kimi/coding/v1/usages`. `usages.limit_5h/limit_7d.used_ratio`.
+  Оба креда (Kimi, KimiCode) оказались ключами одного аккаунта
+  (userId совпадает) — одна общая карточка для всех Kimi-моделей
+
+Проверено end-to-end: у Analytics-юзера с `GLM-5.3 (res)` видна карточка
+резервного аккаунта (weekly ~99%, MCP-остаток 3903/4000), у Agents —
+Kimi Code (5h 100%, weekly 96%) + MiniMax.
+
+---
+
 ### [2026-10-11] — Страница «Лимиты»: остатки токен-планов (MiniMax)
 
 Новая страница `/setup-opencode/limits.html` + endpoint

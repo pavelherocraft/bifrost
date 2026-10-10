@@ -129,6 +129,7 @@ function winHtml(w){
   return '<div class="win">' +
     barRow("5-часовое окно", w.interval) +
     barRow("Недельное окно", w.weekly) +
+    (w.mcp_monthly ? barRow("Поиск и ридеры (месяц)", w.mcp_monthly) : '') +
     '</div>';
 }
 

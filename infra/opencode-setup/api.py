@@ -29,9 +29,11 @@ Endpoints
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 LITELLM_BASE = os.environ.get("LITELLM_BASE", "http://127.0.0.1:4001")
@@ -253,6 +255,82 @@ def _norm_minimax_remains(raw):
     return out
 
 
+def _ms_until(epoch_ms):
+    if not epoch_ms:
+        return None
+    return epoch_ms - int(time.time() * 1000)
+
+
+def _iso_to_ms(s):
+    """'2026-10-15T22:57:49.500651Z' -> epoch ms (naive-safe)."""
+    if not s:
+        return None
+    try:
+        dt = datetime.strptime(s[:19], "%Y-%m-%dT%H:%M:%S")
+        return int(dt.replace(tzinfo=timezone.utc).timestamp() * 1000)
+    except (ValueError, TypeError):
+        return None
+
+
+def _norm_zai_quota(raw):
+    """Z.AI /api/monitor/usage/quota/limit -> normalized window list.
+
+    limits[] rows: TOKENS_LIMIT unit=3 is the 5-hour window, unit=6 is the
+    weekly window; TIME_LIMIT unit=5 is the monthly MCP-tool budget (shown
+    under `extra`, not one of the two token bars). `percentage` is the share
+    USED, so remaining = 100 - percentage. nextResetTime is epoch ms.
+    """
+    data = raw.get("data") or {}
+    interval, weekly, extra = {}, {}, None
+    for e in data.get("limits") or []:
+        rst = e.get("nextResetTime")
+        pct = e.get("percentage")
+        win = {
+            "remaining_percent": (100 - pct) if pct is not None else None,
+            "usage_count": e.get("currentValue"),
+            "total_count": e.get("usage"),
+            "resets_in_ms": _ms_until(rst),
+            "end_time": rst,
+        }
+        t, u = e.get("type"), e.get("unit")
+        if t == "TOKENS_LIMIT" and u == 3:
+            interval = win
+        elif t == "TOKENS_LIMIT" and u == 6:
+            weekly = win
+        elif t == "TIME_LIMIT":
+            extra = win
+    out = {
+        "name": data.get("level") or "coding plan",
+        "interval": interval,
+        "weekly": weekly,
+    }
+    if extra:
+        out["mcp_monthly"] = extra
+    return [out]
+
+
+def _norm_kimi_usages(raw):
+    """Kimi Code /coding/v1/usages -> normalized window list.
+
+    usages.limit_5h / limit_7d carry used_ratio (0..1) and an ISO reset_time.
+    """
+    u = raw.get("usages") or {}
+
+    def win(block):
+        b = u.get(block) or {}
+        r = b.get("used_ratio")
+        ms = _iso_to_ms(b.get("reset_time"))
+        return {
+            "remaining_percent": (round(100 - r * 100, 1)
+                                  if r is not None else None),
+            "resets_in_ms": _ms_until(ms),
+            "end_time": ms,
+        }
+
+    return [{"name": "kimi code",
+             "interval": win("limit_5h"), "weekly": win("limit_7d")}]
+
+
 _LIMIT_PROVIDERS = {
     "minimax": {
         "label": "MiniMax Token Plan",
@@ -263,6 +341,31 @@ _LIMIT_PROVIDERS = {
         },
         "endpoint": "/minimax/v1/token_plan/remains",
         "normalize": _norm_minimax_remains,
+    },
+    "zai": {
+        "label": "GLM Coding Plan (Z.AI)",
+        "models": {"GLM-5.3", "GLM-5.3-Flash"},
+        "endpoint": "/zai/api/monitor/usage/quota/limit",
+        "normalize": _norm_zai_quota,
+    },
+    "zaires": {
+        # Second Z.AI account — the "(res)" deployments ride it as a fallback
+        # for the main GLM models, so anyone with GLM access sees both bars.
+        "label": "GLM Coding Plan (Z.AI, резерв)",
+        "models": {
+            "GLM-5.3", "GLM-5.3-Flash",
+            "GLM-5.3 (res)", "GLM-5.3-Flash (res)",
+        },
+        "endpoint": "/zaires/api/monitor/usage/quota/limit",
+        "normalize": _norm_zai_quota,
+    },
+    "kimi": {
+        # Both Kimi credentials are keys on the same Kimi Code account, so
+        # all four deployments share one quota — a single card is enough.
+        "label": "Kimi Code",
+        "models": {"Kimi K2.7", "Kimi K3", "Kimi K2.8", "Kimi K3-256K"},
+        "endpoint": "/kimi/coding/v1/usages",
+        "normalize": _norm_kimi_usages,
     },
 }
 
