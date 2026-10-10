@@ -29,11 +29,12 @@ Endpoints
 import json
 import os
 import re
+import subprocess
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 LITELLM_BASE = os.environ.get("LITELLM_BASE", "http://127.0.0.1:4001")
@@ -261,6 +262,118 @@ def _ms_until(epoch_ms):
     return epoch_ms - int(time.time() * 1000)
 
 
+def _db_dsn():
+    """DATABASE_URL from litellm .env, with the docker-network host resolved.
+
+    Postgres is not published on the host — the URL's `litellm-pg` hostname
+    only resolves inside the docker network. Resolve it to the container IP
+    via `docker inspect` (api runs as dev01, which is in the docker group);
+    fall back to the literal host for non-docker deployments.
+    """
+    url = None
+    if os.path.exists(ENV_FILE):
+        with open(ENV_FILE) as f:
+            for line in f:
+                m = re.match(r'^DATABASE_URL\s*=\s*["\']?([^"\'#\s]+)', line)
+                if m:
+                    url = m.group(1)
+                    break
+    if not url:
+        raise RuntimeError(f"DATABASE_URL not found in {ENV_FILE}")
+    if "litellm-pg" in url:
+        try:
+            out = subprocess.check_output(
+                ["docker", "inspect", "litellm-pg", "--format",
+                 "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}"],
+                timeout=5, text=True).strip()
+            if out:
+                url = url.replace("litellm-pg", out)
+        except Exception:
+            pass
+    return url
+
+
+def _db_count_requests(model_groups, interval_sql):
+    """Count LiteLLM_SpendLogs rows for the given model_groups in a window."""
+    import psycopg2
+    conn = psycopg2.connect(_db_dsn(), connect_timeout=8)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            'SELECT count(*) FROM "LiteLLM_SpendLogs" '
+            'WHERE "startTime" > now() - interval %s '
+            'AND model_group = ANY(%s)',
+            (interval_sql, list(model_groups)))
+        return cur.fetchone()[0]
+    finally:
+        conn.close()
+
+
+def _db_oldest_in_window(model_groups, interval_sql):
+    """Oldest request timestamp (ms epoch) inside the window — for rolling
+    windows this is when usage starts to drain."""
+    import psycopg2
+    conn = psycopg2.connect(_db_dsn(), connect_timeout=8)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            'SELECT min("startTime") FROM "LiteLLM_SpendLogs" '
+            'WHERE "startTime" > now() - interval %s '
+            'AND model_group = ANY(%s)',
+            (interval_sql, list(model_groups)))
+        ts = cur.fetchone()[0]
+        if not ts:
+            return None
+        # SpendLogs timestamps are stored as naive UTC
+        return int(ts.replace(tzinfo=timezone.utc).timestamp() * 1000)
+    finally:
+        conn.close()
+
+
+def _next_monday_utc8_ms():
+    """Alibaba coding-plan weekly reset: Monday 00:00 (UTC+8)."""
+    now = datetime.now(timezone.utc)
+    days = (7 - now.weekday()) % 7
+    nxt = (now + timedelta(days=days)).replace(
+        hour=16, minute=0, second=0, microsecond=0)  # 00:00 +8 == 16:00 UTC
+    if nxt <= now:
+        nxt += timedelta(days=7)
+    return int(nxt.timestamp() * 1000)
+
+
+def _db_plan_windows(p):
+    """Build normalized windows for a request-count-based plan (no upstream
+    quota API — usage is counted from our own SpendLogs)."""
+    groups = p["db_groups"]
+    lim = p["request_limits"]
+
+    used5 = _db_count_requests(groups, "5 hours")
+    oldest = _db_oldest_in_window(groups, "5 hours")
+    interval_reset = (oldest + 5 * 3600 * 1000) if oldest else None
+    used_w = _db_count_requests(groups, "7 days")
+    weekly_reset = _next_monday_utc8_ms()
+
+    def mk(used, total, reset_ms):
+        return {
+            "remaining_percent": (round(100 - used / total * 100, 1)
+                                  if total else None),
+            "usage_count": used,
+            "total_count": total,
+            "resets_in_ms": _ms_until(reset_ms),
+            "end_time": reset_ms,
+        }
+
+    return [{
+        "name": "request counters",
+        "interval": mk(used5, lim.get("interval"), interval_reset),
+        "weekly": mk(used_w, lim.get("weekly"), weekly_reset),
+        "extra": [{
+            "title": "Месяц (30 дней)",
+            **mk(_db_count_requests(groups, "30 days"), lim.get("monthly"), None),
+        }] if lim.get("monthly") else [],
+    }]
+
+
 def _iso_to_ms(s):
     """'2026-10-15T22:57:49.500651Z' -> epoch ms (naive-safe)."""
     if not s:
@@ -305,7 +418,7 @@ def _norm_zai_quota(raw):
         "weekly": weekly,
     }
     if extra:
-        out["mcp_monthly"] = extra
+        out["extra"] = [{"title": "Поиск и ридеры (месяц)", **extra}]
     return [out]
 
 
@@ -366,6 +479,18 @@ _LIMIT_PROVIDERS = {
         "models": {"Kimi K2.7", "Kimi K3", "Kimi K2.8", "Kimi K3-256K"},
         "endpoint": "/kimi/coding/v1/usages",
         "normalize": _norm_kimi_usages,
+    },
+    "alicoding": {
+        # Alibaba Cloud Coding Plan (coding-intl.dashscope.aliyuncs.com).
+        # No upstream quota API exists — limits are request counts, so we
+        # count the plan's own traffic in LiteLLM_SpendLogs. Pro tier:
+        # 6000 req/5h, 45000/week, 90000/month.
+        "label": "Alibaba Coding Plan",
+        "models": {"QWEN3.7-plus", "Qwen3.5-plus"},
+        "db_groups": {"QWEN3.7-plus", "Qwen3.5-plus"},
+        "request_limits": {"interval": 6000, "weekly": 45000,
+                           "monthly": 90000},
+        "local": _db_plan_windows,
     },
 }
 
@@ -1052,11 +1177,14 @@ class Handler(BaseHTTPRequestHandler):
                         entry = {"id": pid, "label": p["label"],
                                  "models": avail}
                         try:
-                            if not vk_token:
-                                probe = probe or _create_probe_key(uid)
-                                vk_token = probe
-                            raw = _passthrough_get(p["endpoint"], vk_token)
-                            entry["windows"] = p["normalize"](raw)
+                            if "local" in p:
+                                entry["windows"] = p["local"](p)
+                            else:
+                                if not vk_token:
+                                    probe = probe or _create_probe_key(uid)
+                                    vk_token = probe
+                                raw = _passthrough_get(p["endpoint"], vk_token)
+                                entry["windows"] = p["normalize"](raw)
                         except Exception as e:
                             entry["error"] = f"{type(e).__name__}: {e}"
                         providers.append(entry)

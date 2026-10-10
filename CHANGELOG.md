@@ -4,6 +4,28 @@
 
 ---
 
+### [2026-10-11] — «Лимиты»: Alibaba Coding Plan (счётчик по SpendLogs)
+
+Третий вид источника данных: у Coding Plan нет upstream-API квоты —
+лимиты в количестве запросов (Pro: 6000/5ч, 45000/нед, 90000/мес),
+поэтому api.py считает трафик напрямую в `LiteLLM_SpendLogs`
+(по `model_group` в скользящих окнах).
+
+- На хосте установлен `python3-psycopg2`; DSN берётся из
+  `/opt/litellm/.env` (`DATABASE_URL`), хост `litellm-pg` резолвится
+  в IP контейнера через `docker inspect` (PG не опубликован на хост)
+- 5-часовое окно — rolling: сброс оценивается как `min(startTime)+5ч`
+  по запросам в окне; неделя — до ближайшего понедельника 00:00 UTC+8;
+  месяц — rolling 30 дней
+- `limits.html`: произвольные `extra`-бары с заголовками и title-поля
+  у основных окон (заменили жёсткий `mcp_monthly`)
+
+Не сделано (нет API): **MiMo Token Plan** — usage только за web-SSO
+кукой Xiaomi-аккаунта; **Alibaba Token Plan** — консольный гейтвей,
+нужен Bearer-токен из `bl auth login --console`. Ждём куки/токены.
+
+---
+
 ### [2026-10-11] — «Лимиты»: добавлены GLM (Z.AI ×2) и Kimi Code
 
 Страница лимитов теперь показывает три плана помимо MiniMax:

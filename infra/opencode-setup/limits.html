@@ -126,11 +126,11 @@ function barRow(title, w){
 }
 
 function winHtml(w){
-  return '<div class="win">' +
-    barRow("5-часовое окно", w.interval) +
-    barRow("Недельное окно", w.weekly) +
-    (w.mcp_monthly ? barRow("Поиск и ридеры (месяц)", w.mcp_monthly) : '') +
-    '</div>';
+  var h = '<div class="win">' +
+    barRow((w.interval && w.interval.title) || "5-часовое окно", w.interval) +
+    barRow((w.weekly && w.weekly.title) || "Недельное окно", w.weekly);
+  (w.extra || []).forEach(function(b){ h += barRow(b.title, b); });
+  return h + '</div>';
 }
 
 function providerHtml(pr){
