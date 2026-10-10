@@ -542,6 +542,170 @@ def _alicoding_windows(p):
     return _db_plan_windows(p)
 
 
+# StepFun Step Plan quota — platform.stepfun.ai console session.
+# The plan API key cannot read the quota (403); the Dashboard API answers
+# only the web session: Cookie `Oasis-Token=<access...refresh>` —
+# on the international site the cookie must carry the WHOLE pair, an
+# access half alone is rejected as "token is illegal".
+# Access lives ~30 min; the refresh endpoint rotates BOTH halves, so the
+# renewed pair is written back to STEPFUN env file on every refresh —
+# losing a rotated pair kills the session permanently.
+_STEPFUN_ENV = "/opt/opencode-setup/stepfun_session.env"
+_STEPFUN_REFRESH = (
+    "/passport/proto.api.passport.v1.PassportService/RefreshToken")
+_STEPFUN_RATE = (
+    "/api/step.openapi.devcenter.Dashboard/QueryStepPlanRateLimit")
+_STEPFUN_STATUS = (
+    "/api/step.openapi.devcenter.Dashboard/GetStepPlanStatus")
+
+
+def _stepfun_cfg():
+    vals = {}
+    if os.path.exists(_STEPFUN_ENV):
+        with open(_STEPFUN_ENV) as f:
+            for line in f:
+                m = re.match(r'^(STEPFUN_\w+)\s*=\s*["\']?([^"\'#\n]+)', line)
+                if m:
+                    vals[m.group(1)] = m.group(2).strip()
+    if not vals.get("STEPFUN_TOKEN"):
+        raise RuntimeError("STEPFUN_TOKEN not set in stepfun_session.env")
+    return {
+        "token": vals["STEPFUN_TOKEN"],
+        "webid": vals.get("STEPFUN_WEBID", ""),
+        "appid": vals.get("STEPFUN_APPID", "20700"),
+        "base": vals.get("STEPFUN_BASE_URL",
+                        "https://platform.stepfun.ai"),
+    }
+
+
+def _stepfun_save_pair(cfg, pair):
+    """Persist a rotated access...refresh pair — the spent pair cannot be
+    reused, so losing it means re-pasting credentials."""
+    cfg["token"] = pair
+    lines = [f"STEPFUN_TOKEN={pair}",
+             f"STEPFUN_WEBID={cfg['webid']}",
+             f"STEPFUN_APPID={cfg['appid']}",
+             f"STEPFUN_BASE_URL={cfg['base']}"]
+    tmp = _STEPFUN_ENV + ".tmp"
+    with open(tmp, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    os.replace(tmp, _STEPFUN_ENV)
+
+
+def _stepfun_post(cfg, path, header_pair=False):
+    hdrs = {
+        "Content-Type": "application/json",
+        "oasis-appid": cfg["appid"],
+        "oasis-platform": "web",
+        "oasis-webid": cfg["webid"],
+        "Cookie": f"Oasis-Token={cfg['token']}; Oasis-Webid={cfg['webid']}",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) hcproxy/1.0",
+    }
+    if header_pair:
+        hdrs["Oasis-Token"] = cfg["token"]
+    req = urllib.request.Request(cfg["base"] + path, data=b"{}",
+                                 headers=hdrs, method="POST")
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return json.loads(r.read().decode())
+
+
+def _stepfun_dashboard(cfg, path):
+    """POST a Dashboard API, refreshing the token pair on auth failure."""
+    try:
+        return _stepfun_post(cfg, path)
+    except urllib.error.HTTPError as e:
+        if e.code not in (401, 403):
+            raise
+        body = e.read().decode()[:300]
+        if "unauthenticated" not in body and "auth failed" not in body:
+            raise
+    j = _stepfun_post(cfg, _STEPFUN_REFRESH, header_pair=True)
+    acc = j.get("accessToken") or {}
+    ref = j.get("refreshToken") or {}
+    raw = lambda v: v if isinstance(v, str) else (v.get("raw") or "")
+    acc, ref = raw(acc), raw(ref)
+    if not acc:
+        raise RuntimeError("stepfun refresh returned no access token")
+    _stepfun_save_pair(cfg, f"{acc}...{ref}" if ref else acc)
+    return _stepfun_post(cfg, path)
+
+
+def _stepfun_windows(p):
+    """StepFun Step Plan quota -> normalized windows.
+
+    plan_family=2 (credit plans: Mini/Plus/Pro): monthly Credits bucket —
+    subscription_credit_left_rate is the fraction LEFT; credit_buckets
+    carry absolute total/residual + expire_at (epoch s). The 5h/weekly
+    rate fields are 0 for credit plans. Windowed plans would carry
+    five_hour/weekly _usage_left_rate + _reset_time instead.
+    """
+    cfg = _stepfun_cfg()
+    data = _stepfun_dashboard(cfg, _STEPFUN_RATE)
+    name = "step plan"
+    try:
+        st = _stepfun_dashboard(cfg, _STEPFUN_STATUS)
+        sub = (st.get("subscription") or {})
+        if sub.get("name"):
+            name = sub["name"]
+    except Exception:
+        pass
+
+    def ms_from_s(v):
+        try:
+            n = int(v)
+            return n * 1000 if n > 0 else None
+        except (TypeError, ValueError):
+            return None
+
+    credit = data.get("plan_credit_rate_limit") or {}
+    if credit:
+        left = credit.get("subscription_credit_left_rate")
+        buckets = credit.get("credit_buckets") or []
+        used = total = end_ms = None
+        if buckets:
+            t = sum(int(b.get("credit_total") or 0) for b in buckets)
+            r = sum(int(b.get("credit_residual") or 0) for b in buckets)
+            if t:
+                total, used = t, t - r
+            ends = [ms_from_s(b.get("expire_at")) for b in buckets]
+            ends = [e for e in ends if e]
+            end_ms = max(ends) if ends else None
+        if end_ms is None:
+            end_ms = ms_from_s(credit.get("subscription_credit_reset_time"))
+        return [{
+            "name": name,
+            "interval": {
+                "title": "Месячная квота (кредиты)",
+                "remaining_percent": (round(left * 100, 1)
+                                      if left is not None else None),
+                "usage_count": used,
+                "total_count": total,
+                "resets_in_ms": _ms_until(end_ms),
+                "end_time": end_ms,
+            },
+            "weekly": None,
+        }]
+
+    def win(left_rate, reset_s):
+        ms = ms_from_s(reset_s)
+        if left_rate in (None, 0, "0") and not ms:
+            return None
+        return {
+            "remaining_percent": (round(float(left_rate) * 100, 1)
+                                  if left_rate is not None else None),
+            "resets_in_ms": _ms_until(ms),
+            "end_time": ms,
+        }
+
+    return [{
+        "name": name,
+        "interval": win(data.get("five_hour_usage_left_rate"),
+                        data.get("five_hour_usage_reset_time")),
+        "weekly": win(data.get("weekly_usage_left_rate"),
+                      data.get("weekly_usage_reset_time")),
+    }]
+
+
 def _iso_to_ms(s):
     """'2026-10-15T22:57:49.500651Z' -> epoch ms (naive-safe)."""
     if not s:
@@ -732,6 +896,18 @@ _LIMIT_PROVIDERS = {
             "qwen3.7-max", "qwen3.8-max",
         },
         "local": _alitoken_windows,
+    },
+    "stepfun": {
+        # StepFun Step Plan (api.stepfun.ai/step_plan/v1). Quota lives in
+        # the platform.stepfun.ai console session — read via the Dashboard
+        # API with the Oasis-Token pair from stepfun_session.env, with
+        # automatic refresh-pair rotation written back to the file.
+        "label": "StepFun Step Plan",
+        "models": {
+            "stepfun/step-3.5-flash-2603", "stepfun/step-3.7-flash",
+            "stepfun/step-5-preview",
+        },
+        "local": _stepfun_windows,
     },
 }
 

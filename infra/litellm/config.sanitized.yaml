@@ -660,6 +660,14 @@ general_settings:
     methods:
     - GET
     timeout: 60
+  # NOTE: StepFun Step Plan quota is also read directly by the
+  # opencode-setup API (not through this proxy): the web Dashboard API on
+  # platform.stepfun.ai requires the Oasis-Token session pair from
+  # /opt/opencode-setup/stepfun_session.env:
+  #   STEPFUN_TOKEN=<access...refresh>   (rotated on every refresh)
+  #   STEPFUN_WEBID=<device_id from the refresh JWT>
+  #   STEPFUN_APPID=20700                (international console)
+  #   STEPFUN_BASE_URL=https://platform.stepfun.ai
   # NOTE: Alibaba Token Plan / Coding Plan quotas are NOT served through a
   # passthrough — the Bailian console gateway (bailian-singapore-cs.
   # alibabacloud.com/cli/api.json, the same endpoint `bl usage` uses)

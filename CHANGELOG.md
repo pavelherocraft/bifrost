@@ -4,6 +4,31 @@
 
 ---
 
+### [2026-10-11] — «Лимиты»: StepFun Step Plan (Oasis-сессия + авто-refresh)
+
+Квота Step Plan недоступна по API-ключу (`403 api key not permitted`) —
+только через веб-сессию `platform.stepfun.ai` (международная консоль,
+`oasis-appid: 20700`; китайская `.com`/`10300` — другой аккаунт).
+
+- Dashboard API `step.openapi.devcenter.Dashboard/QueryStepPlanRateLimit`
+  + `GetStepPlanStatus` (имя плана). Cookie на `.ai` обязан содержать
+  ВСЮ пару `Oasis-Token=<access...refresh>` — одна access-половина
+  отклоняется как "token is illegal"
+- План «Plus» (credit-семейство): `subscription_credit_left_rate` +
+  `credit_buckets` с total/residual/expire_at — один бар
+  «Месячная квота (кредиты)». Windowed-планы отдали бы 5h/weekly
+- Access живёт ~30 мин, refresh РОТИРУЕТ обе половины → api.py при 401
+  сам дёргает `PassportService/RefreshToken` и перезаписывает пару в
+  `/opt/opencode-setup/stepfun_session.env` (потерянная ротация =
+  смерть сессии, нужен re-paste)
+- Проверено: план Plus — 40.9% кредитов (945M/1.6B), сброс ~22.10
+
+Не сделано: **Tencent Token Plan** (нужен SecretId/SecretKey из CAM для
+`DescribeTokenPlan` — data-plane usage endpoint не существует),
+**Mistral** (нужен отдельный Admin API key для `/v1/admin/usage`).
+
+---
+
 ### [2026-10-11] — «Лимиты»: Alibaba Token Plan + Coding Plan через консольный гейтвей
 
 Консольная сессия Alibaba (`bl auth login --console`, токен лежит в
