@@ -17,10 +17,13 @@ Extra route: POST /upload (Bearer VK required) -> files/uploads/.
 
 import base64
 import binascii
+import hashlib
 import json
 import os
 import re
+import sqlite3
 import uuid
+from datetime import datetime, timezone
 from typing import Annotated, Optional
 
 import httpx
@@ -40,6 +43,9 @@ UPLOADS_DIR = os.path.join(FILES_DIR, "uploads")
 TASKS_CACHE = "/opt/media-mcp/tasks.json"   # task_id -> hosted url (survives TTL cleanup by re-check)
 MAX_UPLOAD = 25 * 1024 * 1024          # nginx client_max_body_size 25M
 MAX_SAMPLE = 10 * 1024 * 1024          # xiaomi voiceclone base64 limit
+RATE_DB = "/opt/media-mcp/rate_limits.sqlite3"   # per-VK daily generation counters
+DAILY_LIMITS = {"video": int(os.environ.get("MCP_VIDEO_DAILY_LIMIT", "10")),
+                "image": int(os.environ.get("MCP_IMAGE_DAILY_LIMIT", "25"))}
 
 MIMO_VOICES = ["mimo_default", "冰糖", "茉莉", "苏打", "白桦",
                "Mia", "Chloe", "Milo", "Dean"]
@@ -97,6 +103,28 @@ def _vk(ctx: Context) -> str:
     if not tok:
         raise ValueError("No LiteLLM virtual key forwarded — call this server through LiteLLM (/litellm/media/mcp) with a Bearer VK.")
     return tok
+
+
+def _check_rate(vk: str, category: str) -> int:
+    """Per-VK per-day generation counter (UTC day). Raises when over limit;
+    returns remaining allowance. Atomic upsert — safe under concurrency."""
+    limit = DAILY_LIMITS[category]
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    kh = hashlib.sha256(vk.encode()).hexdigest()[:32]
+    with sqlite3.connect(RATE_DB) as db:
+        db.execute(
+            "CREATE TABLE IF NOT EXISTS counters "
+            "(k TEXT, cat TEXT, day TEXT, n INTEGER, PRIMARY KEY(k,cat,day))")
+        n = db.execute(
+            "INSERT INTO counters VALUES (?,?,?,1) "
+            "ON CONFLICT(k,cat,day) DO UPDATE SET n=n+1 RETURNING n",
+            (kh, category, day)).fetchone()[0]
+        db.commit()
+    if n > limit:
+        raise ValueError(
+            f"Daily {category} generation limit reached ({limit}/day per key, "
+            "resets 00:00 UTC).")
+    return limit - n
 
 
 async def _llm(vk: str, method: str, path: str, timeout: float = 120, **kw):
@@ -268,6 +296,12 @@ def list_media_models() -> dict:
         "video_resolutions": ["768P", "1080P", "2K (MiniMax-H3 only)"],
         "video_ratios": ["16:9", "4:3", "1:1", "3:4", "9:16", "21:9",
                          "adaptive (i2v only)"],
+        "rate_limits": {
+            "image": f"{DAILY_LIMITS['image']}/day per key "
+                     "(generate_image + edit_image share this counter)",
+            "video": f"{DAILY_LIMITS['video']}/day per key "
+                     "(generate_video; video_status is free)",
+        },
         "notes": [
             "ALL tools return hosted URLs (files live 24h) — never base64 in context",
             "input audio for clone/ASR: http(s) URL | data-URI | base64 | 'upload:<name>'",
@@ -293,6 +327,7 @@ async def generate_image(
     """Generate an image from text. Returns {url} — a hosted public URL (TTL 24h).
     The URL can be passed to generate_video.first_frame_url for image-to-video."""
     vk = _vk(ctx)
+    _check_rate(vk, "image")
     if model == "minimax/image-01":
         body = {"model": "image-01", "prompt": prompt}
         if size:
@@ -337,6 +372,7 @@ async def edit_image(
     Returns {url} — hosted public URL (TTL 24h); usable as
     generate_video.first_frame_url."""
     vk = _vk(ctx)
+    _check_rate(vk, "image")
     async with httpx.AsyncClient(timeout=120) as c:
         raw = await _resolve_source(image, c)
     mime = _mime_for(raw)
@@ -397,6 +433,7 @@ async def generate_video(
     generation takes minutes; poll video_status(task_id) until status=Success.
     H3 models use the v2 multimodal API; others use v1."""
     vk = _vk(ctx)
+    _check_rate(vk, "video")
     if reference_media:
         if model not in VIDEO_V2_MODELS:
             raise ValueError("reference_media works only with MiniMax-H3 / H3-Max (v2 API)")

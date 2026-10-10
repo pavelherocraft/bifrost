@@ -4,6 +4,43 @@
 
 ---
 
+### [2026-10-10] — GigaChat + дневные лимиты медиа-генераций в MCP
+
+**GigaChat (Sber).** Подключён нативный `gigachat`-провайдер LiteLLM
+(ключ авторизации PERS-скоупа; `ssl_verify: false` — сертификат НУЦ
+Минцифры, стандартным CA-бандлам неизвестен).
+
+Деплойменты (БД, api_key зашифрован как обычно):
+- `gigachat/GigaChat-3-Ultra` → `api.giga.chat/v1` (freemium-эндпоинт
+  для физлиц) — выдан **всем 12 командам**
+- `gigachat/GigaChat-2-Max`, `gigachat/GigaChat-2-Pro` → основной
+  `gigachat.devices.sberbank.ru` — выданы команде **Agents**
+- `model_info`: ctx 128K, цены $0 (freemium PERS)
+
+Проверено живым прогоном через прокси: все 3 модели → 200.
+Рестарт не потребовался — роутер подхватил деплойменты из БД сам.
+Ограничения: v1 API — один function call на запрос; vision только
+у Pro/Max; freemium-квоты Сбера применяются на стороне upstream.
+
+**Медиа-лимиты (Johnny the Knight MCP).** В `infra/media-mcp/server.py`
+добавлены дневные счётчики per-VK (sqlite `rate_limits.sqlite3`, UTC-сутки,
+атомарный upsert, хранится sha256 ключа):
+- `generate_video` → **10/день**
+- `generate_image` + `edit_image` → **25/день** (общий счётчик)
+- Лимиты настраиваются env `MCP_VIDEO_DAILY_LIMIT` / `MCP_IMAGE_DAILY_LIMIT`
+- `list_media_models` возвращает блок `rate_limits`
+- При превышении — ошибка «Daily … limit reached (…/day per key,
+  resets 00:00 UTC)»; попытка считается до вызова upstream
+
+Это закрывает дыру: MiniMax-картинки, edit_image и видео шли через
+passthrough мимо `image_rate_limit_hook` (он лимитировал только
+gpt-image/gemini через `/v1/images/generations`).
+
+Проверено end-to-end через `/litellm/media/mcp`: счётчики инкрементятся,
+26-я картинка и 11-е видео отклонены с понятной ошибкой.
+
+---
+
 ### [2026-10-08] — Tencent token-plan: новый ключ, reserved Hy4/mimo + fallbacks
 
 Токен-план Tencent (base `tokenhub-intl.tencentcloudmaas.com/plan/v3`)
