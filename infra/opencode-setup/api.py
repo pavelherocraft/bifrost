@@ -259,7 +259,9 @@ def _norm_minimax_remains(raw):
 def _ms_until(epoch_ms):
     if not epoch_ms:
         return None
-    return epoch_ms - int(time.time() * 1000)
+    # Rolling windows can return a reset time that just elapsed — clamp so
+    # the UI never renders a negative countdown.
+    return max(epoch_ms - int(time.time() * 1000), 0)
 
 
 def _db_dsn():
@@ -372,6 +374,168 @@ def _db_plan_windows(p):
             **mk(_db_count_requests(groups, "30 days"), lim.get("monthly"), None),
         }] if lim.get("monthly") else [],
     }]
+
+
+# Bailian console CLI gateway — the same endpoint the `bl` CLI
+# (bailian-cli) uses for `bl usage token-plan` / `bl usage coding-plan`.
+# Auth is a console access_token captured via `bl auth login --console`
+# (or the /console-login?notice=<host:port> browser callback). The token
+# lives in /opt/litellm/.env as ALIYUN_CONSOLE_TOKEN; when it expires the
+# upstream answers with a NotLogined errorCode and the browser flow must
+# be repeated (refresh requires OpenAPI AK/SK which we don't have).
+_ALIYUN_GW = {
+    ("cn-beijing", "domestic"): (
+        "bailian-cs.console.aliyun.com", "BroadScopeAspnGateway"),
+    ("cn-beijing", "international"): (
+        "bailian-cs.console.alibabacloud.com", "BroadScopeAspnGateway"),
+    ("ap-southeast-1", "domestic"): (
+        "modelstudio-cs.console.aliyun.com", "IntlBroadScopeAspnGateway"),
+    ("ap-southeast-1", "international"): (
+        "bailian-singapore-cs.alibabacloud.com", "IntlBroadScopeAspnGateway"),
+}
+
+
+def _aliyun_console_cfg():
+    # The console token rotates via the browser flow, so it lives in a
+    # dev01-writable file next to api.py rather than the root-owned
+    # litellm .env (still supported as a fallback source).
+    vals = {}
+    for path in ("/opt/opencode-setup/aliyun_console.env", ENV_FILE):
+        if not os.path.exists(path):
+            continue
+        with open(path) as f:
+            for line in f:
+                m = re.match(
+                    r'^(ALIYUN_CONSOLE_\w+)\s*=\s*["\']?([^"\'#\n]+)', line)
+                if m:
+                    vals[m.group(1)] = m.group(2).strip()
+        if vals.get("ALIYUN_CONSOLE_TOKEN"):
+            break
+    if not vals.get("ALIYUN_CONSOLE_TOKEN"):
+        raise RuntimeError("ALIYUN_CONSOLE_TOKEN not set in .env")
+    region = vals.get("ALIYUN_CONSOLE_REGION", "ap-southeast-1")
+    site = vals.get("ALIYUN_CONSOLE_SITE", "international")
+    host, action = _ALIYUN_GW.get(
+        (region, site), _ALIYUN_GW[("cn-beijing", "domestic")])
+    agent = vals.get("ALIYUN_CONSOLE_SWITCH_AGENT")
+    return {"token": vals["ALIYUN_CONSOLE_TOKEN"], "region": region,
+            "host": host, "action": action,
+            "agent": int(agent) if agent else None}
+
+
+def _aliyun_console_call(api_name, data=None):
+    """POST the console gateway (region + params form body) and unwrap the
+    DataV2 double envelope down to the inner data object.
+
+    NOTE: the gateway answers an empty 200 to some HTTP stacks (plain curl
+    is filtered by Alibaba WAF); urllib/httpx fingerprints pass fine.
+    """
+    cfg = _aliyun_console_cfg()
+    cornerstone = {
+        "protocol": "V2",
+        "console": "ONE_CONSOLE",
+        "productCode": "p_efm",
+        "switchUserType": 3,
+        "consoleSite": "BAILIAN_ALIYUN",
+    }
+    if cfg["agent"] is not None:
+        cornerstone["switchAgent"] = cfg["agent"]
+    params = json.dumps({
+        "Api": api_name, "V": "1.0",
+        "Data": {**(data or {}), "cornerstoneParam": cornerstone}})
+    body = urllib.parse.urlencode(
+        {"params": params, "region": cfg["region"]}).encode()
+    url = (f"https://{cfg['host']}/cli/api.json?action={cfg['action']}"
+           f"&product=sfm_bailian&api={urllib.parse.quote(api_name)}")
+    req = urllib.request.Request(url, data=body, headers={
+        "Authorization": f"Bearer {cfg['token']}",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "*/*"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        j = json.loads(r.read().decode())
+    inner = j.get("data") or {}
+    if inner.get("success") is False and inner.get("errorCode"):
+        raise RuntimeError(f"aliyun console: {inner['errorCode']}")
+    payload = (inner.get("DataV2") or {}).get("data") or {}
+    return payload.get("data") or payload
+
+
+def _alitoken_windows(p):
+    """Alibaba Token Plan quota via the console gateway.
+
+    Inner data carries per5Hour*/per1Week*/per1Month* pairs of
+    <window>Percentage (fraction USED, 0..1) + <window>ResetTime (epoch ms).
+    Windows that are absent mean "unlimited" on this plan — ours exposes
+    only the monthly quota, so it lands in the interval slot with a title
+    (same card shape as MiMo).
+    """
+    d = _aliyun_console_call(
+        "zeldaHttp.apikeyMgr./tokenplan/personal/api/v2/usage")
+
+    def win(pct, ms):
+        return {
+            "remaining_percent": (round(100 - pct * 100, 1)
+                                  if pct is not None else None),
+            "resets_in_ms": _ms_until(ms),
+            "end_time": ms,
+        }
+
+    interval = (win(d.get("per5HourPercentage"), d.get("per5HourResetTime"))
+                if d.get("per5HourPercentage") is not None else None)
+    weekly = (win(d.get("per1WeekPercentage"), d.get("per1WeekResetTime"))
+              if d.get("per1WeekPercentage") is not None else None)
+    monthly = (win(d.get("per1MonthPercentage"), d.get("per1MonthResetTime"))
+               if d.get("per1MonthPercentage") is not None else None)
+    out = {"name": "token plan",
+           "interval": interval or {}, "weekly": weekly or {}}
+    if monthly:
+        if interval or weekly:
+            out["extra"] = [{"title": "Месячная квота", **monthly}]
+        else:
+            out["interval"] = {"title": "Месячная квота", **monthly}
+    return [out]
+
+
+def _alicoding_windows(p):
+    """Alibaba Coding Plan quota — console gateway first (authoritative
+    per-window counters + reset times + instance tier), SpendLogs request
+    counting as fallback when the console token is missing/expired."""
+    try:
+        d = _aliyun_console_call(
+            "zeldaEasy.broadscope-bailian.codingPlan."
+            "queryCodingPlanInstanceInfoV2",
+            {"queryCodingPlanInstanceInfoRequest": {
+                "commodityCode": "sfm_codingplan_public_intl",
+                "onlyLatestOne": True}})
+        inst = next((i for i in d.get("codingPlanInstanceInfos") or []
+                     if i.get("status") == "VALID"), None)
+        if inst:
+            q = inst.get("codingPlanQuotaInfo") or {}
+
+            def win(pref):
+                used = q.get(f"{pref}UsedQuota")
+                total = q.get(f"{pref}TotalQuota")
+                ms = q.get(f"{pref}QuotaNextRefreshTime")
+                return {
+                    "remaining_percent": (
+                        round(100 - used / total * 100, 1)
+                        if used is not None and total else None),
+                    "usage_count": used,
+                    "total_count": total,
+                    "resets_in_ms": _ms_until(ms),
+                    "end_time": ms,
+                }
+
+            return [{
+                "name": inst.get("instanceType") or "coding plan",
+                "interval": win("per5Hour"),
+                "weekly": win("perWeek"),
+                "extra": [{"title": "Месяц (30 дней)",
+                           **win("perBillMonth")}],
+            }]
+    except Exception:
+        pass
+    return _db_plan_windows(p)
 
 
 def _iso_to_ms(s):
@@ -540,15 +704,30 @@ _LIMIT_PROVIDERS = {
     },
     "alicoding": {
         # Alibaba Cloud Coding Plan (coding-intl.dashscope.aliyuncs.com).
-        # No upstream quota API exists — limits are request counts, so we
-        # count the plan's own traffic in LiteLLM_SpendLogs. Pro tier:
-        # 6000 req/5h, 45000/week, 90000/month.
+        # Authoritative counters come from the Bailian console gateway
+        # (same API as `bl usage coding-plan`); when the console token is
+        # missing or expired we fall back to counting the plan's own
+        # traffic in LiteLLM_SpendLogs. Pro tier: 6000 req/5h, 45000/week,
+        # 90000/month.
         "label": "Alibaba Coding Plan",
         "models": {"QWEN3.7-plus", "Qwen3.5-plus"},
         "db_groups": {"QWEN3.7-plus", "Qwen3.5-plus"},
         "request_limits": {"interval": 6000, "weekly": 45000,
                            "monthly": 90000},
-        "local": _db_plan_windows,
+        "local": _alicoding_windows,
+    },
+    "alitoken": {
+        # Alibaba Token Plan (token-plan.ap-southeast-1.maas.aliyuncs.com).
+        # Quota lives only in the Bailian console — read through the
+        # console CLI gateway with ALIYUN_CONSOLE_TOKEN from .env.
+        "label": "Alibaba Token Plan",
+        "models": {
+            "AlibabaTokenPlan/deepseek-v4-flash-0731",
+            "AlibabaTokenPlan/deepseek-v4-pro-0813",
+            "aliyun/qwen3.8-flash", "qwen3.6-flash",
+            "qwen3.7-max", "qwen3.8-max",
+        },
+        "local": _alitoken_windows,
     },
 }
 

@@ -4,6 +4,37 @@
 
 ---
 
+### [2026-10-11] — «Лимиты»: Alibaba Token Plan + Coding Plan через консольный гейтвей
+
+Консольная сессия Alibaba (`bl auth login --console`, токен лежит в
+`/opt/opencode-setup/aliyun_console.env`) открыла доступ к настоящим
+серверным счётчикам — тот же гейтвей, что использует `bl usage`
+(`POST bailian-singapore-cs.alibabacloud.com/cli/api.json`,
+`action=IntlBroadScopeAspnGateway`, `product=sfm_bailian`).
+
+- **Alibaba Token Plan** — `zeldaHttp.apikeyMgr./tokenplan/personal/api/v2/usage`.
+  У нашего плана только месячная квота: `per1MonthPercentage` — доля
+  использованного (у нас 86.5% → 13.5% осталось) + `per1MonthResetTime`;
+  поля 5ч/недели отсутствуют (=unlimited, бар не рисуется). Карточка
+  покрывает модели `AlibabaTokenPlan/deepseek-v4-*`, `aliyun/qwen3.8-flash`,
+  `qwen3.6-flash`, `qwen3.7-max`, `qwen3.8-max`
+- **Alibaba Coding Plan** переведён со SpendLogs на авторитетный
+  `zeldaEasy.broadscope-bailian.codingPlan.queryCodingPlanInstanceInfoV2`
+  (реальные `per5Hour/perWeek/perBillMonth` used/total + точные
+  `QuotaNextRefreshTime` + `instanceType: pro`). SpendLogs остался
+  как fallback на случай протухшего токена
+- Вызов идёт напрямую из api.py (urllib) — не через passthrough:
+  гейтвей требует POST-form, а passthrough умеет только JSON-body;
+  плюс Alibaba WAF отдаёт пустой 200 curl-подобным клиентам, urllib/httpx
+  проходят
+- Токен консоли истекает → повторить `bl auth login --console`
+  (ошибка `NotLogined` в errorCode). Обновление через
+  `GenerateCLIAccessToken` требует OpenAPI AK/SK — у нас нет
+- `resets_in_ms` зажат в 0 снизу — rolling-окна иногда возвращают
+  уже наступившее время сброса
+
+---
+
 ### [2026-10-11] — «Лимиты»: Alibaba Coding Plan (счётчик по SpendLogs)
 
 Третий вид источника данных: у Coding Plan нет upstream-API квоты —

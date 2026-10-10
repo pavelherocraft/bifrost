@@ -660,6 +660,19 @@ general_settings:
     methods:
     - GET
     timeout: 60
+  # NOTE: Alibaba Token Plan / Coding Plan quotas are NOT served through a
+  # passthrough — the Bailian console gateway (bailian-singapore-cs.
+  # alibabacloud.com/cli/api.json, the same endpoint `bl usage` uses)
+  # requires a POST form body that passthrough cannot replay. The
+  # opencode-setup API calls it directly using the console session
+  # captured via `bl auth login --console`, stored in
+  # /opt/opencode-setup/aliyun_console.env as:
+  #   ALIYUN_CONSOLE_TOKEN=<MASKED>
+  #   ALIYUN_CONSOLE_SWITCH_AGENT=<MASKED>
+  #   ALIYUN_CONSOLE_REGION=ap-southeast-1
+  #   ALIYUN_CONSOLE_SITE=international
+  # When the token expires (NotLogined errorCode) the browser flow must be
+  # repeated; Coding Plan then falls back to LiteLLM_SpendLogs counting.
 router_settings:
   num_retries: 2
   timeout: 300
