@@ -26,8 +26,19 @@
 - GigaChat: лишние параметры upstream молча игнорирует (200),
   варианты не нужны
 
+Сверка с официальной документацией (последующая правка `model_info` в БД):
+- **Mistral**: официальный max output = **262 144** для всех трёх чат-моделей
+  (встроенная карта LiteLLM занижала до 32 768) — исправлено
+- **GigaChat-2-Max/Pro**: по официальным страницам моделей вход =
+  текст+изображение+**аудио** — проставлен `supports_audio_input`
+  (Lite — text-only, Ultra — freemium text-only, без изменений)
+- Small 4 (`mistral-small-2603`): 256K ctx, vision, reasoning_effort
+  только none/high — подтверждено официальной карточкой
+- Codestral Embed: 8K контекст, дефолтная размерность 1536
+  (max 3072 через `output_dimension`) — соответствует
+
 Проверено end-to-end: `/models` для Agents-юзера отдаёт верные
-context/output/vision/variants; `reasoning_effort` доезжает через
+context/output/vision/audio/variants; `reasoning_effort` доезжает через
 прокси до Mistral (none → content, high → reasoning_content).
 
 ---
