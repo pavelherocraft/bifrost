@@ -4,6 +4,34 @@
 
 ---
 
+### [2026-10-10] — opencode-setup: метаданные GigaChat/Mistral, reasoning-варианты, фильтр embedding
+
+Проверка `/models` opencode-setup для новых провайдеров вскрыла и исправила:
+
+- **Stale cache** — `_MODEL_INFO` кешируется бессрочно; после рестарта
+  `opencode-api` новые модели получили корректные context/output/vision
+  (раньше отдавались нули)
+- **`supports_vision`** проставлен в `model_info` трём чат-деплойментам
+  Mistral (large-4 / medium-3.5 / small-2603) — мультимодальные по
+  встроенной карте LiteLLM
+- **`mistral/codestral-embed` исключён из списка чат-моделей** — новый
+  `_BLOCKED_MODES` = {embedding, audio_transcription, audio_speech}:
+  embedding-модель в чат-списке всегда падала бы на /chat/completions
+- **Reasoning-варианты для Mistral**: upstream принимает только
+  `reasoning_effort` = `high|none` (low/medium/max → 400 «not supported»,
+  `thinking` → 422 extra_forbidden — проверено живым запросом).
+  В `_REASONING_VARIANTS` добавлены off/high для всех трёх чат-моделей;
+  в `_REASONING_CAPABLE` не добавлены специально — иначе генератор
+  отправил бы `thinking` и получил бы 422
+- GigaChat: лишние параметры upstream молча игнорирует (200),
+  варианты не нужны
+
+Проверено end-to-end: `/models` для Agents-юзера отдаёт верные
+context/output/vision/variants; `reasoning_effort` доезжает через
+прокси до Mistral (none → content, high → reasoning_content).
+
+---
+
 ### [2026-10-10] — Mistral API подключён (Large 4 / Medium 3.5 / Small 4 / Codestral Embed)
 
 Нативный `mistral`-провайдер LiteLLM, ключ La Plateforme зашифрован

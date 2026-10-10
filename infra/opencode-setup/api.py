@@ -190,7 +190,26 @@ _REASONING_VARIANTS = {
         "high": {"reasoningEffort": "high"},
         "max":  {"reasoningEffort": "max"},
     },
+    # Mistral upstream accepts only high/none — low/medium/xhigh/max -> 400
+    # error 3051; `thinking` param -> 422 extra_forbidden (verified 2026-10-10).
+    "mistral/mistral-large-4": {
+        "off":  {"reasoningEffort": "none"},
+        "high": {"reasoningEffort": "high"},
+    },
+    "mistral/mistral-medium-3.5": {
+        "off":  {"reasoningEffort": "none"},
+        "high": {"reasoningEffort": "high"},
+    },
+    "mistral/mistral-small-2603": {
+        "off":  {"reasoningEffort": "none"},
+        "high": {"reasoningEffort": "high"},
+    },
 }
+
+# Modes that must not appear in the chat-model list (embeddings are called
+# via /v1/embeddings, not /chat/completions — listing them as chat models
+# makes opencode offer a model that always fails).
+_BLOCKED_MODES = {"embedding", "audio_transcription", "audio_speech"}
 
 # Models that support image generation (text-to-image) via /v1/images/generations.
 # Litellm model_info.mode == 'image_generation' identifies these.
@@ -440,6 +459,7 @@ def build_model_info():
                 "audio": audio,
                 "image": image,
                 "image_edit": image_edit,
+                "mode": (m.get("model_info") or {}).get("mode"),
             }
             aliases[mn] = mn
             # Alias by upstream `model` field (LiteLLM may store the openai-style
@@ -573,7 +593,10 @@ def resolve_models(user_id):
     out = []
     for raw in raw_models:
         canonical = resolve_model_name(raw)
-        limits = table.get(canonical) or {
+        entry = table.get(canonical)
+        if entry and entry.get("mode") in _BLOCKED_MODES:
+            continue
+        limits = entry or {
             "context": 0, "output": 0,
             "vision": False, "video": False, "audio": False,
             "image": False, "image_edit": False,
