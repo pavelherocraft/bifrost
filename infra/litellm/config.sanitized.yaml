@@ -637,6 +637,29 @@ general_settings:
     methods:
     - GET
     timeout: 60
+  # Xiaomi MiMo: quota is web-SSO-only — passthrough replays the session
+  # cookie. When it expires the upstream returns 401 and the cookie must
+  # be refreshed from a logged-in browser (platform.xiaomimimo.com).
+  - path: /mimo/api/v1/tokenPlan/usage
+    target: https://platform.xiaomimimo.com/api/v1/tokenPlan/usage
+    headers:
+      Cookie: <MASKED>
+      Accept: application/json
+      Accept-Language: en
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) hcproxy/1.0
+    methods:
+    - GET
+    timeout: 60
+  - path: /mimo/api/v1/tokenPlan/detail
+    target: https://platform.xiaomimimo.com/api/v1/tokenPlan/detail
+    headers:
+      Cookie: <MASKED>
+      Accept: application/json
+      Accept-Language: en
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) hcproxy/1.0
+    methods:
+    - GET
+    timeout: 60
 router_settings:
   num_retries: 2
   timeout: 300

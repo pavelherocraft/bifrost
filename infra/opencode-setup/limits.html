@@ -108,6 +108,7 @@ function pctClass(p){
 }
 
 function barRow(title, w){
+  if(!w) return '';
   var p = w.remaining_percent;
   var cls = pctClass(p);
   var pctTxt = (p == null) ? "—" : p + "%";

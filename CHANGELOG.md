@@ -20,9 +20,25 @@
 - `limits.html`: произвольные `extra`-бары с заголовками и title-поля
   у основных окон (заменили жёсткий `mcp_monthly`)
 
-Не сделано (нет API): **MiMo Token Plan** — usage только за web-SSO
-кукой Xiaomi-аккаунта; **Alibaba Token Plan** — консольный гейтвей,
-нужен Bearer-токен из `bl auth login --console`. Ждём куки/токены.
+---
+
+### [2026-10-11] — «Лимиты»: MiMo Token Plan (Xiaomi, по куке)
+
+Квота MiMo доступна только за web-SSO сессией `platform.xiaomimimo.com`
+— API-ключ плана её не покрывает. Реализовано через cookie-replay:
+два passthrough `/mimo/api/v1/tokenPlan/{usage,detail}` подставляют
+сессионный Cookie из config.yaml.
+
+- Ответ `monthUsage.items[]`: used/limit/percent по кредитам —
+  план Max, месячная квота (единственное окно плана — занимает
+  слот interval с заголовком «Месячная квота (кредиты)»)
+- `tokenPlan/detail` даёт `planName` и `currentPeriodEnd`
+  (Beijing time → epoch) — дата сброса периода
+- Когда кука протухнет (upstream 401) — обновить Cookie в config.yaml
+
+Не сделано: **Alibaba Token Plan** — консольный гейтвей отвечает пустым
+200 на куки (анти-бот `isg`), надёжный путь — Bearer-токен из
+`bl auth login --console`. Ждём токен.
 
 ---
 

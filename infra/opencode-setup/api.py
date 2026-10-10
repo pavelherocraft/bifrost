@@ -444,6 +444,48 @@ def _norm_kimi_usages(raw):
              "interval": win("limit_5h"), "weekly": win("limit_7d")}]
 
 
+def _norm_mimo_usage(raw):
+    """Xiaomi MiMo tokenPlan usage (+ detail) -> normalized window list.
+
+    data.monthUsage.items[]: name/used/limit/percent (percent = fraction
+    USED, 0..1). The plan is a single monthly Credits window — no 5h/weekly
+    bars, so the monthly bar takes the interval slot with a proper title.
+    data.currentPeriodEnd ("2026-11-06 23:59:59", Beijing time) is fetched
+    from tokenPlan/detail when the provider supplies endpoint_detail.
+    """
+    usage = raw.get("usage_resp") or raw
+    detail = raw.get("detail_resp") or {}
+    items = ((usage.get("data") or {}).get("monthUsage") or {}).get("items") or []
+    end_ms = None
+    d = detail.get("data") or {}
+    if d.get("currentPeriodEnd"):
+        # "2026-11-06 23:59:59" is Beijing-local — _iso_to_ms assumes UTC,
+        # so shift by 8 hours.
+        ms = _iso_to_ms(d["currentPeriodEnd"].replace(" ", "T"))
+        if ms:
+            end_ms = ms - 8 * 3600 * 1000
+    out = []
+    plan_name = d.get("planName")
+    for e in items:
+        used, limit, pct = e.get("used"), e.get("limit"), e.get("percent")
+        remaining = (round(100 - pct * 100, 2) if pct is not None
+                     else (round(100 - used / limit * 100, 2)
+                           if used and limit else None))
+        out.append({
+            "name": plan_name or e.get("name") or "credits",
+            "interval": {
+                "title": "Месячная квота (кредиты)",
+                "remaining_percent": remaining,
+                "usage_count": used,
+                "total_count": limit,
+                "resets_in_ms": _ms_until(end_ms),
+                "end_time": end_ms,
+            },
+            "weekly": None,
+        })
+    return out
+
+
 _LIMIT_PROVIDERS = {
     "minimax": {
         "label": "MiniMax Token Plan",
@@ -479,6 +521,22 @@ _LIMIT_PROVIDERS = {
         "models": {"Kimi K2.7", "Kimi K3", "Kimi K2.8", "Kimi K3-256K"},
         "endpoint": "/kimi/coding/v1/usages",
         "normalize": _norm_kimi_usages,
+    },
+    "mimo": {
+        # Xiaomi MiMo Token Plan. Quota lives behind the platform's web-SSO
+        # session — the passthrough replays the session Cookie from config.
+        # Cookie will eventually expire -> replace in config.yaml.
+        "label": "MiMo Token Plan (Xiaomi)",
+        "models": {
+            "mimo-v2.5", "mimo-v2.5-pro",
+            "xiaomi/mimo-v2.6-flash", "xiaomi/mimo-v2.6-pro",
+            "voice/xiaomi/mimo-v2.5-asr", "voice/xiaomi/mimo-v2.5-tts",
+            "voice/xiaomi/mimo-v2.5-tts-voiceclone",
+            "voice/xiaomi/mimo-v2.5-tts-voicedesign",
+        },
+        "endpoint": "/mimo/api/v1/tokenPlan/usage",
+        "endpoint_detail": "/mimo/api/v1/tokenPlan/detail",
+        "normalize": _norm_mimo_usage,
     },
     "alicoding": {
         # Alibaba Cloud Coding Plan (coding-intl.dashscope.aliyuncs.com).
@@ -1184,6 +1242,12 @@ class Handler(BaseHTTPRequestHandler):
                                     probe = probe or _create_probe_key(uid)
                                     vk_token = probe
                                 raw = _passthrough_get(p["endpoint"], vk_token)
+                                if p.get("endpoint_detail"):
+                                    raw = {
+                                        "usage_resp": raw,
+                                        "detail_resp": _passthrough_get(
+                                            p["endpoint_detail"], vk_token),
+                                    }
                                 entry["windows"] = p["normalize"](raw)
                         except Exception as e:
                             entry["error"] = f"{type(e).__name__}: {e}"
