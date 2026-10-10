@@ -17,9 +17,14 @@
   `gigachat.devices.sberbank.ru` — выданы команде **Agents**
 - `gigachat/GigaChat-2-Lite` (upstream `GigaChat-2`) — команда **Agents**
 
-Цены (`model_info`, официальный прайс Сбера ₽/1M → $ по ~80₽/$,
-единый тариф вход=выход): Lite $0.81/1M, Pro $6.25/1M, Max $8.13/1M,
-Ultra $0 (freemium). В SpendLogs фигурирует upstream-имя
+Цены (`model_info`, корпоративные тарифы Сбера ₽/1M → $ по ~80₽/$;
+у юрлиц и физлиц они одинаковые, вход=выход): Lite $0.81/1M,
+Pro $6.25/1M, Max $8.13/1M. Ultra — freemium-only у Сбера, цены нет;
+проставлен корпоративный эквивалент cloud.ru Evolution для
+GigaChat 3.5 Ultra: $1.20/1M вход, $3.61/1M выход (96/289 ₽/1M).
+Контекст нашего `GigaChat-3-Ultra` — 128K (официальная таблица);
+262K — это GigaChat **3.5** Ultra, на PERS-ключе недоступна (404),
+нужен аккаунт cloud.ru. В SpendLogs фигурирует upstream-имя
 (`gigachat/GigaChat-2` = Lite и т.д.) — списание проверено.
 
 Проверено живым прогоном через прокси: все 3 модели → 200.
