@@ -486,8 +486,9 @@ def _alitoken_windows(p):
               if d.get("per1WeekPercentage") is not None else None)
     monthly = (win(d.get("per1MonthPercentage"), d.get("per1MonthResetTime"))
                if d.get("per1MonthPercentage") is not None else None)
-    out = {"name": "token plan",
-           "interval": interval or {}, "weekly": weekly or {}}
+    # None windows are skipped by the frontend — our plan only has the
+    # monthly quota, so no empty "Недельное окно" bar should render.
+    out = {"name": "token plan", "interval": interval, "weekly": weekly}
     if monthly:
         if interval or weekly:
             out["extra"] = [{"title": "Месячная квота", **monthly}]
@@ -516,6 +517,8 @@ def _alicoding_windows(p):
                 used = q.get(f"{pref}UsedQuota")
                 total = q.get(f"{pref}TotalQuota")
                 ms = q.get(f"{pref}QuotaNextRefreshTime")
+                if used is None and total is None and ms is None:
+                    return None
                 return {
                     "remaining_percent": (
                         round(100 - used / total * 100, 1)
@@ -526,12 +529,13 @@ def _alicoding_windows(p):
                     "end_time": ms,
                 }
 
+            monthly = win("perBillMonth")
             return [{
                 "name": inst.get("instanceType") or "coding plan",
                 "interval": win("per5Hour"),
                 "weekly": win("perWeek"),
-                "extra": [{"title": "Месяц (30 дней)",
-                           **win("perBillMonth")}],
+                "extra": ([{"title": "Месяц (30 дней)", **monthly}]
+                          if monthly else []),
             }]
     except Exception:
         pass
