@@ -29,6 +29,7 @@ Endpoints
 import json
 import os
 import re
+import ssl
 import subprocess
 import time
 import urllib.error
@@ -908,6 +909,172 @@ def _mistral_windows(p):
     }]
 
 
+# PAYG provider API keys (Atlas Cloud, OpenRouter, GigaChat) live in
+# payg_keys.env — same pattern as the other console/session env files.
+_PAYG_ENV = "/opt/opencode-setup/payg_keys.env"
+
+
+def _payg_key(name):
+    for path in (_PAYG_ENV, ENV_FILE):
+        if not os.path.exists(path):
+            continue
+        with open(path) as f:
+            for line in f:
+                m = re.match(r'^' + name + r'\s*=\s*["\']?([^"\'#\n]+)',
+                             line)
+                if m:
+                    return m.group(1).strip()
+    raise RuntimeError(f"{name} not set")
+
+
+def _atlas_windows(p):
+    """Atlas Cloud PAYG account — Billing Public API.
+
+    /public/v1/balance carries available/cash/bonus/subscription_bonus +
+    credit_grant (a credit line, when negotiated, is a real quota).
+    /model-costs gives daily USD spend — summed for the current UTC
+    month. The balance itself has no "total" so it renders as a plain
+    remaining-count row.
+    """
+    key = _payg_key("ATLASCLOUD_API_KEY")
+
+    def get(path):
+        req = urllib.request.Request(
+            "https://api.atlascloud.ai" + path,
+            # Cloudflare 1010 bans the default Python-urllib UA.
+            headers={"Authorization": "Bearer " + key,
+                     "User-Agent": "python-httpx/0.27.0"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read().decode())
+
+    bal = get("/public/v1/balance")
+
+    def money(node):
+        return float((node or {}).get("value") or 0)
+
+    avail = money(bal.get("available"))
+    cg = bal.get("credit_grant") or {}
+    granted, cg_used = money(cg.get("granted")), money(cg.get("used"))
+
+    today = datetime.now(timezone.utc).date()
+    start = today.replace(day=1).isoformat()
+    end = (today + timedelta(days=1)).isoformat()
+    spend = 0.0
+    try:
+        costs = get(f"/public/v1/model-costs?start_date={start}"
+                    f"&end_date={end}&scope=account&limit=1000")
+        for row in costs.get("data") or []:
+            v = (row.get("cost") or row.get("total_cost")
+                 or row.get("amount") or row.get("value"))
+            if isinstance(v, dict):
+                v = v.get("value")
+            try:
+                spend += float(v or 0)
+            except (TypeError, ValueError):
+                pass
+    except Exception:
+        pass
+
+    interval = {
+        "title": "Баланс / расход за месяц",
+        "remaining_percent": (round(avail / granted * 100, 1)
+                              if granted else None),
+        "remaining_count": round(avail, 2),
+        "unit": "USD",
+        "usage_count": round(spend, 2),
+    }
+    extra = []
+    if granted:
+        extra.append({
+            "title": "Кредитная линия",
+            "remaining_percent": (round(100 - cg_used / granted * 100, 1)
+                                  if granted else None),
+            "usage_count": round(cg_used, 2),
+            "total_count": round(granted, 2),
+        })
+    acc = bal.get("account") or {}
+    return [{"name": acc.get("type") or "account",
+             "interval": interval, "weekly": None, "extra": extra}]
+
+
+def _openrouter_windows(p):
+    """OpenRouter key limit — GET /api/v1/auth/key returns the key's own
+    spend limit (limit/limit_remaining/limit_reset) + budgets[] with an
+    ISO resets_at."""
+    key = _payg_key("OPENROUTER_API_KEY")
+    req = urllib.request.Request(
+        "https://openrouter.ai/api/v1/auth/key",
+        headers={"Authorization": "Bearer " + key})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        d = (json.loads(r.read().decode()).get("data")) or {}
+    lim, rem = d.get("limit"), d.get("limit_remaining")
+    b = (d.get("budgets") or [{}])[0]
+    end_ms = _iso_to_ms(b.get("resets_at"))
+    title = {"daily": "Дневной лимит ($)", "weekly": "Недельный лимит ($)",
+             "monthly": "Месячный лимит ($)"}.get(
+        d.get("limit_reset") or "", "Лимит ($)")
+    return [{
+        "name": "key limit",
+        "interval": {
+            "title": title,
+            "remaining_percent": (round(rem / lim * 100, 1)
+                                  if rem is not None and lim else None),
+            "usage_count": (round(lim - rem, 2)
+                            if lim is not None and rem is not None
+                            else None),
+            "total_count": lim,
+            "resets_in_ms": _ms_until(end_ms),
+            "end_time": end_ms,
+        },
+        "weekly": None,
+    }]
+
+
+def _gigachat_windows(p):
+    """GigaChat token balance — OAuth client-credentials exchange
+    (scope tried in order) then /api/v1/balance. The balance endpoint
+    returns remaining tokens per tier; grant sizes are not exposed, so
+    each tier renders as a remaining-count row."""
+    cred = _payg_key("GIGACHAT_CREDENTIALS")
+    ctx = ssl._create_unverified_context()
+    tok = None
+    for scope in ("GIGACHAT_API_PERS", "GIGACHAT_API_CORP",
+                  "GIGACHAT_API_B2B"):
+        req = urllib.request.Request(
+            "https://ngw.devices.sberbank.ru:9443/api/v2/oauth",
+            data=urllib.parse.urlencode({"scope": scope}).encode(),
+            headers={
+                "Authorization": "Basic " + cred,
+                "RqUID": "00000000-0000-0000-0000-000000000001",
+                "Content-Type": "application/x-www-form-urlencoded",
+            })
+        try:
+            with urllib.request.urlopen(req, timeout=30,
+                                        context=ctx) as r:
+                tok = json.loads(r.read().decode())["access_token"]
+                break
+        except urllib.error.HTTPError:
+            continue
+    if not tok:
+        raise RuntimeError("gigachat oauth failed on all scopes")
+    req = urllib.request.Request(
+        "https://gigachat.devices.sberbank.ru/api/v1/balance",
+        headers={"Authorization": "Bearer " + tok})
+    with urllib.request.urlopen(req, timeout=30, context=ctx) as r:
+        bal = json.loads(r.read().decode())
+    tiers = {b.get("usage"): b.get("value")
+             for b in bal.get("balance") or []}
+    order = [("Ultra", "GigaChat-Ultra"), ("Pro", "GigaChat-Pro"),
+             ("Max", "GigaChat-Max"), ("Lite", "GigaChat")]
+    bars = [{"title": title, "remaining_count": tiers[key],
+             "unit": "токенов", "remaining_percent": None}
+            for title, key in order if tiers.get(key) is not None]
+    if not bars:
+        raise RuntimeError("empty balance response")
+    return [{"name": "pers", "interval": bars[0], "weekly": None,
+             "extra": bars[1:]}]
+
+
 def _iso_to_ms(s):
     """'2026-10-15T22:57:49.500651Z' -> epoch ms (naive-safe)."""
     if not s:
@@ -1147,6 +1314,36 @@ _LIMIT_PROVIDERS = {
             "mistral/mistral-small-2603", "mistral/codestral-embed",
         },
         "local": _mistral_windows,
+    },
+    "atlas": {
+        # Atlas Cloud PAYG (api.atlascloud.ai) — Billing Public API
+        # /public/v1/balance + model-costs. Key from payg_keys.env.
+        "label": "Atlas Cloud",
+        "models": {
+            "atlas/deepseek-v4-flash-0731", "atlas/deepseek-v4-pro-0813",
+            "atlas/qwen3.8-max", "atlas_glm-5.1", "atlas_glm-5.2",
+            "bytedance/doubao-seed-2.1-turbo-260628",
+            "deepseek-ai/deepseek-v3.2", "deepseek-ai/deepseek-v4-flash",
+            "deepseek-v4-pro", "seed-2.1",
+        },
+        "local": _atlas_windows,
+    },
+    "gigachat": {
+        # GigaChat PAYG — OAuth + /api/v1/balance token counts per tier.
+        # Base64 credentials from payg_keys.env.
+        "label": "GigaChat",
+        "models": {
+            "gigachat/GigaChat-2-Lite", "gigachat/GigaChat-2-Max",
+            "gigachat/GigaChat-2-Pro", "gigachat/GigaChat-3-Ultra",
+        },
+        "local": _gigachat_windows,
+    },
+    "openrouter": {
+        # OpenRouter — GET /api/v1/auth/key returns the key's own
+        # daily spend limit. Key from payg_keys.env.
+        "label": "OpenRouter",
+        "models": {"openrouter/deepseek-v4.1-flash"},
+        "local": _openrouter_windows,
     },
 }
 

@@ -4,6 +4,26 @@
 
 ---
 
+### [2026-10-11] — «Лимиты»: Atlas Cloud, GigaChat, OpenRouter (PAYG)
+
+Три PAYG-провайдера с публичными billing API — ключи лежат в
+`/opt/opencode-setup/payg_keys.env` (ATLASLOUD_API_KEY,
+OPENROUTER_API_KEY, GIGACHAT_CREDENTIALS).
+
+- **Atlas Cloud**: `/public/v1/balance` (available/cash/bonus +
+  credit_grant) + `/model-costs` за текущий месяц → бар «Баланс /
+  расход за месяц». Cloudflare 1010 банит дефолтный urllib UA —
+  отправляем `python-httpx`. Учётка сейчас при $0
+- **GigaChat**: OAuth `/v2/oauth` (scope PERS/CORP/B2B перебором) +
+  `/api/v1/balance` → остаток токенов по тирам Ultra/Pro/Max/Lite
+  (extra-бары; грант не отдаётся — показываем остаток без %)
+- **OpenRouter**: `/api/v1/auth/key` → дневной лимит ключа
+  ($10/day, remaining + resets_at из budgets[])
+- limits.html: `remaining_count` («осталось N <unit>») и solo
+  `usage_count` («израсходовано N») для балансов без квотного total
+
+---
+
 ### [2026-10-11] — «Лимиты»: Mistral Pro (консольная сессия admin.mistral.ai)
 
 У аккаунта без организации Admin API недоступен (`/v1/admin/*` → 401,

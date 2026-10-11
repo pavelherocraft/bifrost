@@ -117,9 +117,13 @@ function barRow(title, w){
   var cls = pctClass(p);
   var pctTxt = (p == null) ? "—" : p + "%";
   var counts = "";
+  if(w.remaining_count != null)
+    counts += "<div>осталось <b>" + w.remaining_count + "</b> " + (w.unit || "") + "</div>";
   if(w.total_count){
     var used = (w.usage_count != null) ? w.usage_count : "—";
-    counts = "<div><b>" + used + "</b> / " + w.total_count + " использовано</div>";
+    counts += "<div><b>" + used + "</b> / " + w.total_count + " использовано</div>";
+  } else if(w.usage_count != null){
+    counts += "<div>израсходовано <b>" + w.usage_count + "</b> " + (w.unit || "") + "</div>";
   }
   return '<div class="win-head"><span class="win-name">' + title + '</span>' +
     '<span class="pct ' + cls + '">' + pctTxt + '</span></div>' +
