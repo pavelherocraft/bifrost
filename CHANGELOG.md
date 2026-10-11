@@ -10,10 +10,15 @@
 `/opt/opencode-setup/payg_keys.env` (ATLASLOUD_API_KEY,
 OPENROUTER_API_KEY, GIGACHAT_CREDENTIALS).
 
-- **Atlas Cloud**: `/public/v1/balance` (available/cash/bonus +
-  credit_grant) + `/model-costs` за текущий месяц → бар «Баланс /
-  расход за месяц». Cloudflare 1010 банит дефолтный urllib UA —
-  отправляем `python-httpx`. Учётка сейчас при $0
+- **Atlas Cloud**: Coding Plan — консольный API
+  `console.atlascloud.ai/api/v1/codeplan/get` принимает тот же
+  apikey Bearer. План Max: недельный кап 165M points (weekly_used/
+  weekly_cap, сброс понедельник 00:00 UTC) + месячный тотал 330M
+  (used_quota/total_quota, конец — ExpiredAt); активные PAYG-пакеты
+  (PlanType "package", PackageQuota) отдельными блоками; PAYG-баланс
+  $ + расход за месяц (`/public/v1/balance` + `/model-costs`)
+  extra-строкой. Cloudflare 1010 банит дефолтный urllib UA —
+  отправляем `python-httpx`
 - **GigaChat**: OAuth `/v2/oauth` (scope PERS/CORP/B2B перебором) +
   `/api/v1/balance` → остаток токенов по тирам Ultra/Pro/Max/Lite
   (extra-бары; грант не отдаётся — показываем остаток без %)

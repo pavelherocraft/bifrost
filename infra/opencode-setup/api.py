@@ -927,74 +927,128 @@ def _payg_key(name):
     raise RuntimeError(f"{name} not set")
 
 
-def _atlas_windows(p):
-    """Atlas Cloud PAYG account — Billing Public API.
+def _next_monday_utc_ms():
+    """Atlas Coding Plan weekly cap resets Monday 00:00 UTC."""
+    now = datetime.now(timezone.utc)
+    d = now + timedelta(days=(7 - now.weekday()) % 7)
+    if d.date() == now.date():
+        d += timedelta(days=7)
+    return int(datetime(d.year, d.month, d.day,
+                        tzinfo=timezone.utc).timestamp() * 1000)
 
-    /public/v1/balance carries available/cash/bonus/subscription_bonus +
-    credit_grant (a credit line, when negotiated, is a real quota).
-    /model-costs gives daily USD spend — summed for the current UTC
-    month. The balance itself has no "total" so it renders as a plain
-    remaining-count row.
+
+def _atlas_windows(p):
+    """Atlas Cloud Coding Plan quota — console API /codeplan/get.
+
+    The account is a Coding Plan subscription (points, not USD): the
+    public /balance API only sees the $ PAYG purse and shows $0. The
+    console API accepts the same apikey Bearer and returns every
+    subscription: monthly plans carry total_quota + weekly_cap with
+    used counters, PAYG packs (PlanType "package") carry PackageQuota.
+    PAYG balance/spend is appended as an extra informational row.
     """
     key = _payg_key("ATLASCLOUD_API_KEY")
 
-    def get(path):
+    def get(path, base="https://api.atlascloud.ai", data=None):
         req = urllib.request.Request(
-            "https://api.atlascloud.ai" + path,
+            base + path,
+            data=json.dumps(data).encode() if data is not None else None,
             # Cloudflare 1010 bans the default Python-urllib UA.
             headers={"Authorization": "Bearer " + key,
-                     "User-Agent": "python-httpx/0.27.0"})
+                     "User-Agent": "python-httpx/0.27.0",
+                     "Content-Type": "application/json",
+                     "Accept": "application/json"})
         with urllib.request.urlopen(req, timeout=30) as r:
             return json.loads(r.read().decode())
 
-    bal = get("/public/v1/balance")
+    subs = get("/codeplan/get", base="https://console.atlascloud.ai/api/v1",
+               data={}).get("data") or []
 
-    def money(node):
-        return float((node or {}).get("value") or 0)
+    def num(v):
+        try:
+            return float(v or 0)
+        except (TypeError, ValueError):
+            return None
 
-    avail = money(bal.get("available"))
-    cg = bal.get("credit_grant") or {}
-    granted, cg_used = money(cg.get("granted")), money(cg.get("used"))
+    def quota_bar(title, used, total, end_ms):
+        return {
+            "title": title,
+            "remaining_percent": (round(100 - used / total * 100, 1)
+                                  if used is not None and total else None),
+            "usage_count": (round(used) if used is not None else None),
+            "total_count": (round(total) if total else None),
+            "resets_in_ms": _ms_until(end_ms),
+            "end_time": end_ms,
+        }
 
-    today = datetime.now(timezone.utc).date()
-    start = today.replace(day=1).isoformat()
-    end = (today + timedelta(days=1)).isoformat()
-    spend = 0.0
+    out = []
+    payg_balance = payg_spend = None
+    week_end = _next_monday_utc_ms()
+    for s in subs:
+        if s.get("Status") != "active":
+            continue
+        if s.get("PlanType") == "monthly":
+            # Dual-limit plan: weekly cap + monthly total (points).
+            out.append({
+                "name": s.get("PlanName") or "plan",
+                "interval": quota_bar(
+                    "Недельная квота (points)",
+                    num(s.get("weekly_used")), num(s.get("weekly_cap")),
+                    week_end),
+                "weekly": quota_bar(
+                    "Месячная квота (points)",
+                    num(s.get("used_quota")), num(s.get("total_quota")),
+                    s.get("ExpiredAt")),
+            })
+        else:
+            # PAYG points package with its own expiry (ValidDays).
+            total, used = num(s.get("PackageQuota")), num(s.get("used_quota"))
+            remaining = num(s.get("balance"))
+            if not total or (remaining is not None and remaining <= 0
+                             and used is not None and used >= total):
+                continue
+            out.append({
+                "name": f"пакет {s.get('PlanName') or 'PAYG'}",
+                "interval": quota_bar("Пакет (points)", used, total,
+                                      s.get("ExpiredAt")),
+                "weekly": None,
+            })
+    if not out:
+        raise RuntimeError("no active Coding Plan subscription")
+    # PAYG purse + month spend as an informational extra on the plan card.
     try:
-        costs = get(f"/public/v1/model-costs?start_date={start}"
-                    f"&end_date={end}&scope=account&limit=1000")
+        bal = get("/public/v1/balance")
+
+        def money(node):
+            return float((node or {}).get("value") or 0)
+
+        payg_balance = money(bal.get("available"))
+        today = datetime.now(timezone.utc).date()
+        costs = get(f"/public/v1/model-costs?start_date="
+                    f"{today.replace(day=1).isoformat()}&end_date="
+                    f"{(today + timedelta(days=1)).isoformat()}"
+                    f"&scope=account&limit=1000")
+        payg_spend = 0.0
         for row in costs.get("data") or []:
             v = (row.get("cost") or row.get("total_cost")
                  or row.get("amount") or row.get("value"))
             if isinstance(v, dict):
                 v = v.get("value")
             try:
-                spend += float(v or 0)
+                payg_spend += float(v or 0)
             except (TypeError, ValueError):
                 pass
     except Exception:
         pass
-
-    interval = {
-        "title": "Баланс / расход за месяц",
-        "remaining_percent": (round(avail / granted * 100, 1)
-                              if granted else None),
-        "remaining_count": round(avail, 2),
-        "unit": "USD",
-        "usage_count": round(spend, 2),
-    }
-    extra = []
-    if granted:
-        extra.append({
-            "title": "Кредитная линия",
-            "remaining_percent": (round(100 - cg_used / granted * 100, 1)
-                                  if granted else None),
-            "usage_count": round(cg_used, 2),
-            "total_count": round(granted, 2),
+    if payg_balance is not None:
+        out[0].setdefault("extra", []).append({
+            "title": "PAYG баланс / расход за месяц",
+            "remaining_count": round(payg_balance, 2),
+            "unit": "USD",
+            "usage_count": (round(payg_spend, 2)
+                            if payg_spend is not None else None),
         })
-    acc = bal.get("account") or {}
-    return [{"name": acc.get("type") or "account",
-             "interval": interval, "weekly": None, "extra": extra}]
+    return out
 
 
 def _openrouter_windows(p):
