@@ -660,6 +660,11 @@ general_settings:
     methods:
     - GET
     timeout: 60
+  # NOTE: Mistral Pro subscription quota is read by the opencode-setup
+  # API by scraping admin.mistral.ai/subscription (Next.js flight data:
+  # api_budget/vibe_budget) with the web-session cookie — the plain API
+  # key gets 404 on billing endpoints. Cookie lives in
+  # /opt/opencode-setup/mistral_session.env as MISTRAL_ADMIN_COOKIE.
   # NOTE: Tencent TokenHub Token Plan quota is read by the opencode-setup
   # API via the Tencent Cloud control-plane API (TC3-HMAC-SHA256 signed
   # DescribeTokenPlanList on tokenhub.intl.tencentcloudapi.com) — the

@@ -833,6 +833,81 @@ def _tencent_windows(p):
     return out
 
 
+# Mistral Pro subscription — included monthly allowance lives in the
+# admin.mistral.ai console; the ordinary API key cannot read it (the
+# /v1/admin/* API wants an organization admin key, and this account has
+# no org). The /subscription page embeds api_budget/vibe_budget in the
+# Next.js flight data, so we replay the web session Cookie
+# (ory_session_* + csrftoken) from mistral_session.env and scrape it —
+# same approach as CodexBar. Cookie expiry -> replace in the env file.
+_MISTRAL_ENV = "/opt/opencode-setup/mistral_session.env"
+_MISTRAL_SUB_URL = "https://admin.mistral.ai/subscription"
+
+
+def _mistral_cookie():
+    for path in (_MISTRAL_ENV, ENV_FILE):
+        if not os.path.exists(path):
+            continue
+        with open(path) as f:
+            for line in f:
+                if not line.startswith("MISTRAL_ADMIN_COOKIE="):
+                    continue
+                c = line.split("=", 1)[1].strip()
+                if len(c) > 1 and c[0] == c[-1] and c[0] in "\"'":
+                    c = c[1:-1]
+                if c:
+                    return c
+    raise RuntimeError("MISTRAL_ADMIN_COOKIE not set")
+
+
+def _mistral_windows(p):
+    req = urllib.request.Request(_MISTRAL_SUB_URL, headers={
+        "Cookie": _mistral_cookie(),
+        "Accept": "text/html",
+        "Referer": _MISTRAL_SUB_URL,
+        "User-Agent": "Mozilla/5.0",
+    })
+    with urllib.request.urlopen(req, timeout=30) as r:
+        html = r.read().decode("utf-8", "replace")
+    # Flight rows: self.__next_f.push([1,"<json-escaped text>"]) — decode
+    # each chunk as a JSON string, then pull the flat budget objects out.
+    chunks = re.findall(
+        r'self\.__next_f\.push\(\[1,"((?:\\.|[^"\\])*)"\]\)', html)
+    text = "".join(json.loads('"' + c + '"') for c in chunks)
+    budgets = {}
+    for name, raw in re.findall(
+            r'"(api_budget|vibe_budget)":(\{[^{}]*\})', text):
+        try:
+            budgets[name] = json.loads(raw)
+        except ValueError:
+            pass
+    if not budgets.get("api_budget"):
+        raise RuntimeError("budget not found in subscription page")
+
+    def win(b, title):
+        pct = b.get("usage_percentage")
+        lim = b.get("initial_budget")
+        ms = _iso_to_ms(b.get("reset_at"))
+        return {
+            "title": title,
+            "remaining_percent": (round(100 - pct, 2)
+                                  if pct is not None else None),
+            "usage_count": (round(lim * pct / 100, 2)
+                            if pct is not None and lim else None),
+            "total_count": lim,
+            "resets_in_ms": _ms_until(ms),
+            "end_time": ms,
+        }
+
+    vibe = budgets.get("vibe_budget") or {}
+    return [{
+        "name": "pro",
+        "interval": win(budgets["api_budget"], "API (месяц)"),
+        "weekly": None,
+        "extra": ([win(vibe, "Vibe Code (месяц)")] if vibe else []),
+    }]
+
+
 def _iso_to_ms(s):
     """'2026-10-15T22:57:49.500651Z' -> epoch ms (naive-safe)."""
     if not s:
@@ -1055,6 +1130,19 @@ _LIMIT_PROVIDERS = {
             "tencent/mimo-v2.6-pro (reserved - use when main is exhausted)",
         },
         "local": _tencent_windows,
+    },
+    "mistral": {
+        # Mistral Pro subscription (api.mistral.ai). The included monthly
+        # allowance is console-only — the plain API key gets 404 on
+        # billing endpoints and there is no org admin key. Scraped from
+        # admin.mistral.ai/subscription flight data with the web-session
+        # Cookie from mistral_session.env.
+        "label": "Mistral Pro",
+        "models": {
+            "mistral/mistral-large-4", "mistral/mistral-medium-3.5",
+            "mistral/mistral-small-2603", "mistral/codestral-embed",
+        },
+        "local": _mistral_windows,
     },
 }
 

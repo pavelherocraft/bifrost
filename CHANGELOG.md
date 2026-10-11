@@ -4,6 +4,24 @@
 
 ---
 
+### [2026-10-11] — «Лимиты»: Mistral Pro (консольная сессия admin.mistral.ai)
+
+У аккаунта без организации Admin API недоступен (`/v1/admin/*` → 401,
+`/v1/billing/*` → 404), а included monthly allowance живёт только в
+консоли. Карточка читает `admin.mistral.ai/subscription` web-сессией
+(ory_session_* + csrftoken из `/opt/opencode-setup/mistral_session.env`)
+и парсит `api_budget`/`vibe_budget` из Next.js flight-данных — тот же
+подход, что у CodexBar.
+
+- **API (месяц)**: €0.04 / €25.5 (99.8% осталось), `reset_at` из ответа
+- **Vibe Code (месяц)** — `extra`-баром: €0 / €255
+- Живые поля: `usage_percentage` (доля USED), `initial_budget`,
+  `reset_at` — сброс 01.11
+- Покрывает все 4 `mistral/*` модели; при протухании куки — заменить
+  `MISTRAL_ADMIN_COOKIE` в env-файле
+
+---
+
 ### [2026-10-11] — «Лимиты»: Tencent Token Plan (TC3-подпись, control-plane)
 
 У плана нет data-plane usage API (плановый `sk-tp-*` ключ отдаёт 404 на
