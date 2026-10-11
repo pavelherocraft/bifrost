@@ -61,6 +61,13 @@ _KIMI_EMPTY_MSG_MODELS = (
     "Kimi K3-256K", "Kimi K2.8",
 )
 
+# Models whose upstreams consume reasoning_content echoed back in request
+# history (interleaved thinking). For every other model we strip
+# reasoning_content/reasoning_details from messages: strict upstreams
+# (e.g. Mistral) 400 with "extra_forbidden", and DeepSeek explicitly asks
+# to exclude reasoning_content from follow-up requests.
+_REASONING_ECHO_MODELS = ("minimax", "mimo", "kimi", "glm", "xiaomi")
+
 _TRACE_LOG = "/tmp/hook-trace.log"
 _trace_enabled = os.environ.get("HOOK_TRACE", "0") == "1"
 
@@ -171,6 +178,31 @@ def _sanitize_kimi_messages(data, model):
     return patched
 
 
+def _strip_reasoning_messages(data, model):
+    """Drop reasoning_content/reasoning_details from request messages.
+
+    Clients (opencode) echo assistant history verbatim, including
+    reasoning_content produced by a previous reasoning-model turn.
+    Upstreams either ignore it or hard-fail: Mistral 400s with
+    "extra_forbidden", DeepSeek docs say to exclude it. Models whose
+    providers actually consume it (_REASONING_ECHO_MODELS) keep it.
+    """
+    if any(t in model.lower() for t in _REASONING_ECHO_MODELS):
+        return 0
+    messages = data.get("messages")
+    if not isinstance(messages, list) or not messages:
+        return 0
+    stripped = 0
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        if "reasoning_content" in msg or "reasoning_details" in msg:
+            msg.pop("reasoning_content", None)
+            msg.pop("reasoning_details", None)
+            stripped += 1
+    return stripped
+
+
 class UserAgentLogger(CustomLogger):
     def log_success_event(self, kwargs, response_obj, start_time, end_time):
         return None
@@ -266,6 +298,22 @@ class UserAgentLogger(CustomLogger):
                 "user_agent_hook: reasoning convert ERROR: %s\n%s",
                 e, traceback.format_exc(),
             )
+        # Strip reasoning_content echoed back in history for providers that
+        # don't accept it (Mistral 400s with extra_forbidden).
+        try:
+            model = (data or {}).get("model") or ""
+            stripped = _strip_reasoning_messages(data, model)
+            if stripped:
+                verbose_proxy_logger.warning(
+                    "user_agent_hook: stripped reasoning_content from %d "
+                    "messages for model=%s",
+                    stripped, model,
+                )
+        except Exception as e:
+            verbose_proxy_logger.warning(
+                "user_agent_hook: reasoning strip ERROR: %s\n%s",
+                e, traceback.format_exc(),
+            )
         return data
 
     async def async_pre_call_deployment_hook(self, kwargs, call_type):
@@ -318,6 +366,22 @@ class UserAgentLogger(CustomLogger):
         except Exception as e:
             verbose_proxy_logger.warning(
                 "user_agent_hook: kimi_empty_msg_filter (deployment) ERROR: %s\n%s",
+                e, traceback.format_exc(),
+            )
+        # Same reasoning_content strip on the deployment path (fallback
+        # retries bypass async_pre_call_hook).
+        try:
+            model = (kwargs or {}).get("model") or ""
+            stripped = _strip_reasoning_messages(kwargs, model)
+            if stripped:
+                verbose_proxy_logger.warning(
+                    "user_agent_hook: stripped reasoning_content from %d "
+                    "messages (deployment) for model=%s",
+                    stripped, model,
+                )
+        except Exception as e:
+            verbose_proxy_logger.warning(
+                "user_agent_hook: reasoning strip (deployment) ERROR: %s\n%s",
                 e, traceback.format_exc(),
             )
         return kwargs

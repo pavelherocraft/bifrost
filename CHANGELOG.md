@@ -4,6 +4,20 @@
 
 ---
 
+### [2026-10-11] — Фикс: strip reasoning_content для не-reasoning провайдеров
+
+Клиенты (opencode) шлют историю as-is, включая `reasoning_content`
+прошлых reasoning-моделей. Строгие upstream'ы 400-ят
+(`extra_forbidden` у Mistral; DeepSeek просит исключать поле).
+
+- user_agent_hook: `_strip_reasoning_messages` в `async_pre_call_hook`
+  и `async_pre_call_deployment_hook` — срезает
+  `reasoning_content`/`reasoning_details` из `messages` для всех
+  моделей кроме interleaved-thinking провайдеров
+  (`minimax|mimo|kimi|glm|xiaomi`), которые его реально используют
+
+---
+
 ### [2026-10-11] — «Лимиты»: Atlas Cloud, GigaChat, OpenRouter (PAYG)
 
 Три PAYG-провайдера с публичными billing API — ключи лежат в
