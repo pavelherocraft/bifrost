@@ -1020,6 +1020,10 @@ def _norm_mimo_usage(raw):
     return out
 
 
+# pid -> (monotonic_ts, windows, error); see the /limits handler.
+_WINDOWS_CACHE = {}
+_WINDOWS_TTL = 90  # seconds
+
 _LIMIT_PROVIDERS = {
     "minimax": {
         "label": "MiniMax Token Plan",
@@ -1828,6 +1832,19 @@ class Handler(BaseHTTPRequestHandler):
                             continue
                         entry = {"id": pid, "label": p["label"],
                                  "models": avail}
+                        # Quota windows are account-level — identical for
+                        # every caller — so each provider's last result is
+                        # cached briefly. Without this a full /limits pass
+                        # serialises ~10 remote calls and can exceed the
+                        # nginx proxy_read_timeout.
+                        ce = _WINDOWS_CACHE.get(pid)
+                        if ce and time.monotonic() - ce[0] < _WINDOWS_TTL:
+                            if ce[2] is not None:
+                                entry["error"] = ce[2]
+                            else:
+                                entry["windows"] = ce[1]
+                            providers.append(entry)
+                            continue
                         try:
                             if "local" in p:
                                 entry["windows"] = p["local"](p)
@@ -1843,8 +1860,12 @@ class Handler(BaseHTTPRequestHandler):
                                             p["endpoint_detail"], vk_token),
                                     }
                                 entry["windows"] = p["normalize"](raw)
+                            _WINDOWS_CACHE[pid] = (
+                                time.monotonic(), entry["windows"], None)
                         except Exception as e:
                             entry["error"] = f"{type(e).__name__}: {e}"
+                            _WINDOWS_CACHE[pid] = (
+                                time.monotonic(), None, entry["error"])
                         providers.append(entry)
                 finally:
                     if probe:
