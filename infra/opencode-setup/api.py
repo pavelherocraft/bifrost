@@ -706,6 +706,133 @@ def _stepfun_windows(p):
     }]
 
 
+# Tencent Cloud TokenHub Token Plan quota — control-plane API
+# (tokenhub.intl.tencentcloudapi.com) with classic TC3-HMAC-SHA256
+# signing. The plan's own sk-tp-* key only does inference; quota lives in
+# DescribeTokenPlanList / DescribeTokenPlan behind SecretId/SecretKey
+# (CAM -> API Key Management) stored in /opt/opencode-setup/tencent_console.env.
+_TENCENT_ENV = "/opt/opencode-setup/tencent_console.env"
+_TENCENT_HOST = "tokenhub.intl.tencentcloudapi.com"
+_TENCENT_REGION = "ap-singapore"
+_TENCENT_VERSION = "2026-03-22"
+
+
+def _tencent_cfg():
+    vals = {}
+    if os.path.exists(_TENCENT_ENV):
+        with open(_TENCENT_ENV) as f:
+            for line in f:
+                m = re.match(
+                    r'^(TENCENTCLOUD_\w+)\s*=\s*["\']?([^"\'#\n]+)', line)
+                if m:
+                    vals[m.group(1)] = m.group(2).strip()
+    if not vals.get("TENCENTCLOUD_SECRET_ID") \
+            or not vals.get("TENCENTCLOUD_SECRET_KEY"):
+        raise RuntimeError(
+            "TENCENTCLOUD_SECRET_ID/SECRET_KEY not set in tencent_console.env")
+    return vals
+
+
+def _tc3_call(action, payload):
+    import hashlib
+    import hmac
+    cfg = _tencent_cfg()
+    sid, skey = (cfg["TENCENTCLOUD_SECRET_ID"],
+                 cfg["TENCENTCLOUD_SECRET_KEY"])
+    region = cfg.get("TENCENTCLOUD_REGION", _TENCENT_REGION)
+    ts = int(time.time())
+    date = datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%d")
+    body = json.dumps(payload)
+    ctype = "application/json; charset=utf-8"
+    canonical_headers = (f"content-type:{ctype}\nhost:{_TENCENT_HOST}\n"
+                         f"x-tc-action:{action.lower()}\n")
+    signed_headers = "content-type;host;x-tc-action"
+    canonical_request = (
+        "POST\n/\n\n" + canonical_headers + "\n" + signed_headers + "\n"
+        + hashlib.sha256(body.encode()).hexdigest())
+    cred_scope = f"{date}/tokenhub/tc3_request"
+    string_to_sign = (
+        "TC3-HMAC-SHA256\n" + str(ts) + "\n" + cred_scope + "\n"
+        + hashlib.sha256(canonical_request.encode()).hexdigest())
+
+    def hm(k, m):
+        return hmac.new(k, m.encode(), hashlib.sha256).digest()
+    sig_key = hm(("TC3" + skey).encode(), date)
+    sig_key = hm(sig_key, "tokenhub")
+    sig_key = hm(sig_key, "tc3_request")
+    signature = hmac.new(
+        sig_key, string_to_sign.encode(), hashlib.sha256).hexdigest()
+    req = urllib.request.Request(
+        f"https://{_TENCENT_HOST}/", data=body.encode(), method="POST",
+        headers={
+            "Authorization": (
+                f"TC3-HMAC-SHA256 Credential={sid}/{cred_scope}, "
+                f"SignedHeaders={signed_headers}, Signature={signature}"),
+            "Content-Type": ctype,
+            "X-TC-Action": action,
+            "X-TC-Timestamp": str(ts),
+            "X-TC-Version": _TENCENT_VERSION,
+            "X-TC-Region": region,
+        })
+    with urllib.request.urlopen(req, timeout=20) as r:
+        j = json.loads(r.read().decode())
+    resp = j.get("Response") or {}
+    if resp.get("Error"):
+        err = resp["Error"]
+        raise RuntimeError(
+            f"tencent {action}: {err.get('Code')} {err.get('Message')}")
+    return resp
+
+
+def _rfc3339_to_ms(s):
+    """'2026-11-08T22:27:56+08:00' -> epoch ms."""
+    if not s:
+        return None
+    try:
+        return int(datetime.fromisoformat(s).timestamp() * 1000)
+    except (ValueError, TypeError):
+        return None
+
+
+def _tencent_windows(p):
+    """Tencent TokenHub Token Plan -> normalized windows.
+
+    DescribeTokenPlanList already carries PackageInfo with the cycle
+    quota: TotalQuota/TotalUsed credits, ExpireTime = cycle end
+    (CycleUnit "m" == monthly billing cycle). Disabled/isolated
+    packages are skipped — one block per active package.
+    """
+    resp = _tc3_call("DescribeTokenPlanList", {"Limit": 50, "Offset": 0})
+    out = []
+    for plan in resp.get("TokenPlanSet") or []:
+        if plan.get("Status") != "enable" or plan.get("UseStatus") != "enable":
+            continue
+        info = plan.get("PackageInfo") or {}
+        try:
+            total = float(info.get("TotalQuota") or 0)
+            used = float(info.get("TotalUsed") or 0)
+        except (TypeError, ValueError):
+            total = used = None
+        end_ms = _rfc3339_to_ms(info.get("ExpireTime"))
+        out.append({
+            "name": plan.get("Name") or "token plan",
+            "interval": {
+                "title": "Месячная квота (кредиты)",
+                "remaining_percent": (round(100 - used / total * 100, 1)
+                                      if used is not None and total else None),
+                "usage_count": (round(used, 2) if used is not None else None),
+                "total_count": (int(total) if total is not None
+                                and float(total).is_integer() else total),
+                "resets_in_ms": _ms_until(end_ms),
+                "end_time": end_ms,
+            },
+            "weekly": None,
+        })
+    if not out:
+        raise RuntimeError("no enabled Token Plan package")
+    return out
+
+
 def _iso_to_ms(s):
     """'2026-10-15T22:57:49.500651Z' -> epoch ms (naive-safe)."""
     if not s:
@@ -908,6 +1035,26 @@ _LIMIT_PROVIDERS = {
             "stepfun/step-5-preview",
         },
         "local": _stepfun_windows,
+    },
+    "tencent": {
+        # Tencent Cloud TokenHub Token Plan (tokenhub-intl.
+        # tencentcloudmaas.com/plan/v3 — all tencent/* deployments).
+        # Quota via control-plane DescribeTokenPlanList signed with
+        # SecretId/SecretKey from tencent_console.env. Both the PAYG
+        # (/v1) and reserved (/plan/v3) models map here — the plan is
+        # the shared fallback pool.
+        "label": "Tencent Token Plan",
+        "models": {
+            "tencent/Hy3", "tencent/Hy4",
+            "tencent/Hy4 (reserved - use when main is exhausted)",
+            "tencent/Kimi K3 (reserved - use when main is exhausted)",
+            "tencent/deepseek-v4-pro-0813",
+            "tencent/glm-5-3 (reserved - use when main is exhausted)",
+            "tencent/glm5-3flash (reserved - use when main is exhausted)",
+            "tencent/mimo-v2.6-flash (reserved - use when main is exhausted)",
+            "tencent/mimo-v2.6-pro (reserved - use when main is exhausted)",
+        },
+        "local": _tencent_windows,
     },
 }
 

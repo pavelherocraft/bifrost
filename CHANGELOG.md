@@ -4,6 +4,25 @@
 
 ---
 
+### [2026-10-11] — «Лимиты»: Tencent Token Plan (TC3-подпись, control-plane)
+
+У плана нет data-plane usage API (плановый `sk-tp-*` ключ отдаёт 404 на
+всех кандидатах) — квота читается через официальный Tencent Cloud API
+`tokenhub.intl.tencentcloudapi.com` с TC3-HMAC-SHA256 подписью
+(SecretId/SecretKey из CAM → API Key Management, лежат в
+`/opt/opencode-setup/tencent_console.env`, регион ap-singapore).
+
+- `DescribeTokenPlanList` (version 2026-03-22) — `PackageInfo`:
+  TotalQuota/TotalUsed кредитов + ExpireTime (конец цикла, CycleUnit "m").
+  Активный план `litellm10_26`: 1075.14/50000 кредитов, ~97.8%
+  осталось, цикл до 08.11
+- Карточка покрывает все `tencent/*` модели — `/v1` (PAYG) и
+  `/plan/v3` (reserved) — план это общий резервный пул
+- Выключенные/изолированные пакеты (`Status != enable`) пропускаются;
+  при нескольких активных — по блоку на пакет
+
+---
+
 ### [2026-10-11] — «Лимиты»: StepFun Step Plan (Oasis-сессия + авто-refresh)
 
 Квота Step Plan недоступна по API-ключу (`403 api key not permitted`) —

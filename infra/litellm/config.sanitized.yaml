@@ -660,6 +660,14 @@ general_settings:
     methods:
     - GET
     timeout: 60
+  # NOTE: Tencent TokenHub Token Plan quota is read by the opencode-setup
+  # API via the Tencent Cloud control-plane API (TC3-HMAC-SHA256 signed
+  # DescribeTokenPlanList on tokenhub.intl.tencentcloudapi.com) — the
+  # plan's sk-tp-* inference key cannot query usage. Credentials live in
+  # /opt/opencode-setup/tencent_console.env:
+  #   TENCENTCLOUD_SECRET_ID=<MASKED>
+  #   TENCENTCLOUD_SECRET_KEY=<MASKED>
+  #   TENCENTCLOUD_REGION=ap-singapore
   # NOTE: StepFun Step Plan quota is also read directly by the
   # opencode-setup API (not through this proxy): the web Dashboard API on
   # platform.stepfun.ai requires the Oasis-Token session pair from
