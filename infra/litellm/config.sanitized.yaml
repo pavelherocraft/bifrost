@@ -91,26 +91,6 @@ litellm_settings:
       cache_read_input_token_cost: 3.0e-08
       input_cost_per_token: 3.0e-07
       output_cost_per_token: 1.2e-06
-    MiniMax-M2.5:
-      cache_read_input_token_cost: 3.0e-08
-      input_cost_per_token: 3.0e-07
-      output_cost_per_token: 1.2e-06
-    MiniMax-M2.5-highspeed:
-      cache_read_input_token_cost: 3.0e-08
-      input_cost_per_token: 3.0e-07
-      output_cost_per_token: 1.2e-06
-    MiniMax-M2.7:
-      cache_read_input_token_cost: 6.0e-08
-      input_cost_per_token: 3.0e-07
-      output_cost_per_token: 1.2e-06
-    MiniMax-M2.7 (res):
-      cache_read_input_token_cost: 6.0e-08
-      input_cost_per_token: 3.0e-07
-      output_cost_per_token: 1.2e-06
-    MiniMax-M2.7-highspeed:
-      cache_read_input_token_cost: 6.0e-08
-      input_cost_per_token: 3.0e-07
-      output_cost_per_token: 1.2e-06
     MiniMax-M3:
       cache_read_input_token_cost: 6.0e-08
       input_cost_per_token: 3.0e-07

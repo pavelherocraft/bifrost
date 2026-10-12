@@ -4,6 +4,30 @@
 
 ---
 
+### [2026-10-12] — Удалены MiniMax-M2.5 и M2.7 (все версии)
+
+Убраны `MiniMax-M2.5`, `MiniMax-M2.5-highspeed`, `MiniMax-M2.7`,
+`MiniMax-M2.7-highspeed` (+ осиротевший `MiniMax-M2.7 (res)` в model_cost).
+Модели жили в БД (`model_list: []` в config.yaml).
+
+- `LiteLLM_ProxyModelTable`: удалены 4 строки (бэкап:
+  `/tmp/m25_m27_models_backup.json` на VM)
+- `LiteLLM_TeamTable.models`: вычищены у всех 12 команд
+- `LiteLLM_VerificationToken.models`: вычищены у 940 вирт. ключей
+  (у 155 ключей был явный `MiniMax-M2.5` в per-key списках)
+- config.yaml: убраны 5 блоков `model_cost`
+- api.py: `_REASONING_CAPABLE` и `_LIMIT_PROVIDERS[minimax].models`
+- user_agent_hook.py: `_MERGE_FIRST_CHUNK_MODELS` без `MiniMax-M2.7`
+- index.html: карточка гайда заменена на `MiniMax-M2.1-highspeed`,
+  FALLBACK_MODELS без M2.7
+- build_model_cost.py: убраны 5 маппингов
+
+Остаются: `MiniMax-M2.1-highspeed`, `MiniMax-M3`,
+`MiniMax-M3.1-Flash-Preview`. Проверено `/v1/models` — следов
+M2.5/M2.7 нет.
+
+---
+
 ### [2026-10-12] — Авто-авторизация квот: MiMo local + Alibaba AK/SK
 
 - **MiMo Token Plan**: провайдер переведён с litellm-passthrough

@@ -73,7 +73,7 @@ _REASONING_CAPABLE = {
     "kimi-k2-0905-preview", "kimi-k2-turbo-preview",
     "Kimi K2.6", "Kimi K2.7", "Kimi K3",
     "Kimi K3-256K", "Kimi K2.8",
-    "MiniMax-M2.5", "MiniMax-M3", "MiniMax-M3.1-Flash-Preview",
+    "MiniMax-M3", "MiniMax-M3.1-Flash-Preview",
     "nvidia/nemotron-3-ultra-550b-a55b",
     "nvidia/deepseek-v4.1-flash (free)", "nvidia/glm-5.3 (free)",
     "nvidia/glm-5.3-flash (free)", "nvidia/kimi-k3 (free)",
@@ -1493,8 +1493,7 @@ _LIMIT_PROVIDERS = {
     "minimax": {
         "label": "MiniMax Token Plan",
         "models": {
-            "MiniMax-M2.1-highspeed", "MiniMax-M2.5", "MiniMax-M2.5-highspeed",
-            "MiniMax-M2.7", "MiniMax-M2.7 (res)", "MiniMax-M2.7-highspeed",
+            "MiniMax-M2.1-highspeed",
             "MiniMax-M3", "Minimax-M3", "MiniMax-M3.1-Flash-Preview",
         },
         "endpoint": "/minimax/v1/token_plan/remains",

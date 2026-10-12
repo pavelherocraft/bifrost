@@ -3,7 +3,7 @@ LiteLLM callback: UA injection + reasoning streaming normalization + Kimi empty
 assistant message filter.
 
 For models whose first streaming chunk is role-only WITHOUT reasoning_content
-(Kimi K2.6/K2.7, MiniMax-M2.7), BUFFER the first chunk and merge it with the
+(Kimi K2.6/K2.7), BUFFER the first chunk and merge it with the
 next chunk that has actual content/reasoning_content. This produces a first
 chunk that opencode's @ai-sdk/openai-compatible parser accepts:
 
@@ -50,7 +50,6 @@ OPENCODE_UA = os.environ.get(
 _MERGE_FIRST_CHUNK_MODELS = (
     "Kimi K2.6", "Kimi K2.7", "Kimi K3",
     "Kimi K3-256K", "Kimi K2.8",
-    "MiniMax-M2.7",
 )
 
 # Moonshot (Kimi) is strict about empty assistant messages: HTTP 400 if

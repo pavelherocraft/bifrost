@@ -41,11 +41,6 @@ OVERRIDES = {
 
     # === MiniMax (OpenRouter namespace: minimax) ===
     "MiniMax-M2.1-highspeed": "minimax/minimax-m2.1",
-    "MiniMax-M2.5":           "minimax/minimax-m2.5",
-    "MiniMax-M2.5-highspeed": "minimax/minimax-m2.5",
-    "MiniMax-M2.7":           "minimax/minimax-m2.7",
-    "MiniMax-M2.7 (res)":     "minimax/minimax-m2.7",
-    "MiniMax-M2.7-highspeed": "minimax/minimax-m2.7",
     "MiniMax-M3":             "minimax/minimax-m3",
     "Minimax-M3":             "minimax/minimax-m3",
 
