@@ -21,8 +21,11 @@
   подписью (реплика механизма `bl auth login --open-api`).
   При `NotLogined` токен минтится, пишется в aliyun_console.env,
   запрос повторяется. AK: ALIYUN_ACCESS_KEY_ID/SECRET в том же файле.
-  ⚠️ Требует права `modelstudio:GenerateCLIAccessToken` у
-  RAM-пользователя ключа
+  Работает end-to-end: месячная квота плана читается, карточка
+  живая. Потребовался RAM-сабьюзер с: правом
+  `modelstudio:GenerateCLIAccessToken`, членством в аккаунте и
+  воркспейсе Bailian (tenant 244999), ролью Admin воркспейса —
+  ошибки шли каскадом Team → Workspace → AuthorityPolicies
 
 ---
 
