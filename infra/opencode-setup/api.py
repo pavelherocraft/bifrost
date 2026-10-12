@@ -1366,9 +1366,15 @@ def _mimo_relogin(cfg):
     """Re-issue api-platform_serviceToken via Xiaomi passport replay.
 
     Requires account-level creds in mimo_session.env:
-    MIMO_USERID / MIMO_CUSERID / MIMO_PASS_TOKEN / MIMO_SSECURITY —
-    taken from the account.xiaomi.com cookie jar, NOT the platform ones.
-    Returns updated cfg dict with a rewritten MIMO_COOKIE.
+    MIMO_USERID / MIMO_CUSERID / MIMO_PASS_TOKEN — taken from the
+    account.xiaomi.com cookie jar, NOT the platform ones (the
+    platform-scoped api-platform_ph/slh cannot re-mint serviceToken —
+    account.xiaomi.com answers 70016).
+
+    Flow: fetch the platform-issued loginUrl (it carries the sign
+    parameter /sts validates) -> replay serviceLogin with _json=true
+    -> follow the location ticket URL -> /sts sets fresh serviceToken
+    cookies. Returns updated cfg dict with a rewritten MIMO_COOKIE.
     """
     import http.cookiejar
     pt, uid = cfg.get("MIMO_PASS_TOKEN"), cfg.get("MIMO_USERID")
@@ -1379,32 +1385,42 @@ def _mimo_relogin(cfg):
     jar = http.cookiejar.CookieJar()
     opener = urllib.request.build_opener(
         urllib.request.HTTPCookieProcessor(jar))
+    ua = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    try:
+        body = urllib.request.urlopen(urllib.request.Request(
+            _MIMO_BASE + "/api/v1/tokenPlan/usage", headers=ua),
+            timeout=20).read().decode()
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()
+    try:
+        login_url = (json.loads(body) or {}).get("loginUrl")
+    except (json.JSONDecodeError, AttributeError):
+        login_url = None
+    if not login_url:
+        raise RuntimeError("mimo relogin: no loginUrl from platform")
     acct = (f"userId={uid}; cUserId={cfg.get('MIMO_CUSERID') or uid}; "
-            f"passToken={pt}; ssecurity={cfg.get('MIMO_SSECURITY', '')}")
-    req = urllib.request.Request(
-        "https://account.xiaomi.com/pass/serviceLogin"
-        "?sid=api-platform&_json=true"
-        "&callback=" + urllib.parse.quote(
-            "https://platform.xiaomimimo.com/sts", safe=""),
-        headers={"Cookie": acct,
-                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
-    raw = opener.open(req, timeout=30).read().decode()
-    raw = re.sub(r'^&&&START&&&', '', raw.strip())
-    j = json.loads(raw)
-    if j.get("code") not in (0, None) or j.get("result") == "error":
+            f"passToken={pt}")
+    sep = "&" if "?" in login_url else "?"
+    raw = opener.open(urllib.request.Request(
+        login_url + sep + "_json=true",
+        headers={**ua, "Cookie": acct}), timeout=30).read().decode()
+    j = json.loads(re.sub(r'^&&&START&&&', '', raw.strip()))
+    if j.get("code") != 0 or j.get("result") == "error":
         raise RuntimeError(
             f"mimo relogin failed: {j.get('code')} "
             f"{j.get('description')}")
     loc = j.get("location")
     if not loc:
         raise RuntimeError("mimo relogin: no sts location in response")
-    opener.open(loc, timeout=30).read()  # /sts sets serviceToken cookies
-    fresh = {c.name: c.value for c in jar
+    opener.open(urllib.request.Request(loc, headers=ua),
+                timeout=30).read()  # /sts sets serviceToken cookies
+    fresh = {c.name: (c.value or "").strip('"') for c in jar
              if c.name in ("api-platform_serviceToken", "api-platform_slh",
-                           "api-platform_ph", "userId")}
+                           "api-platform_ph")}
     if not fresh.get("api-platform_serviceToken"):
         raise RuntimeError("mimo relogin: sts callback set no serviceToken")
-    cookie = ("cookie-preferences={\"analytics\":true}; "
+    cookie = ("cookie-preferences={\"analytics\":true}; userId="
+              + str(uid) + "; "
               + "; ".join(f"{k}={v}" for k, v in fresh.items()))
     cfg["MIMO_COOKIE"] = cookie
     _mimo_save(cfg)
