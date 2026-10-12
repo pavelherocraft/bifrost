@@ -4,6 +4,28 @@
 
 ---
 
+### [2026-10-12] — Авто-авторизация квот: MiMo local + Alibaba AK/SK
+
+- **MiMo Token Plan**: провайдер переведён с litellm-passthrough
+  (кука была захардкожена в config.yaml headers, обновление =
+  рестарт litellm) на `local:`-чтение `platform.xiaomimimo.com`
+  с Cookie из `/opt/opencode-setup/mimo_session.env`. Реализован
+  `_mimo_relogin` — перевыпуск serviceToken через
+  `account.xiaomi.com/pass/serviceLogin?sid=api-platform` replay
+  (нужны MIMO_PASS_TOKEN + MIMO_USERID + сsecurity/cUserId —
+  account-level креды с account.xiaomi.com; platform-куки
+  slh/ph service-scoped, перевыпуск без них невозможен — 70016)
+- **Alibaba Token Plan**: авто-минт консольного токена из OpenAPI
+  AK/SK — `GenerateCLIAccessToken` на
+  `modelstudio.ap-southeast-1.aliyuncs.com` с ACS3-HMAC-SHA256
+  подписью (реплика механизма `bl auth login --open-api`).
+  При `NotLogined` токен минтится, пишется в aliyun_console.env,
+  запрос повторяется. AK: ALIYUN_ACCESS_KEY_ID/SECRET в том же файле.
+  ⚠️ Требует права `modelstudio:GenerateCLIAccessToken` у
+  RAM-пользователя ключа
+
+---
+
 ### [2026-10-11] — Фикс: strip reasoning_content для не-reasoning провайдеров
 
 Клиенты (opencode) шлют историю as-is, включая `reasoning_content`

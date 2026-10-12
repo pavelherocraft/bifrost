@@ -407,7 +407,7 @@ def _aliyun_console_cfg():
         with open(path) as f:
             for line in f:
                 m = re.match(
-                    r'^(ALIYUN_CONSOLE_\w+)\s*=\s*["\']?([^"\'#\n]+)', line)
+                    r'^(ALIYUN_\w+)\s*=\s*["\']?([^"\'#\n]+)', line)
                 if m:
                     vals[m.group(1)] = m.group(2).strip()
         if vals.get("ALIYUN_CONSOLE_TOKEN"):
@@ -420,8 +420,102 @@ def _aliyun_console_cfg():
         (region, site), _ALIYUN_GW[("cn-beijing", "domestic")])
     agent = vals.get("ALIYUN_CONSOLE_SWITCH_AGENT")
     return {"token": vals["ALIYUN_CONSOLE_TOKEN"], "region": region,
-            "host": host, "action": action,
+            "host": host, "action": action, "site": site,
+            "ak": vals.get("ALIYUN_ACCESS_KEY_ID"),
+            "sk": vals.get("ALIYUN_ACCESS_KEY_SECRET"),
             "agent": int(agent) if agent else None}
+
+
+# `bl auth login --open-api` stores AK/SK and mints a fresh console token
+# on demand via a signed OpenAPI call — same trick replicated here so the
+# console token never needs a browser refresh:
+#   POST https://modelstudio.<region>.aliyuncs.com
+#        /modelstudio/cli/generateAccessToken
+#   x-acs-action: GenerateCLIAccessToken, x-acs-version: 2026-02-10
+#   Authorization: ACS3-HMAC-SHA256 Credential=<AK>,...
+def _aliyun_cli_token(cfg):
+    """Mint a console access token from OpenAPI AK/SK (ACS3-HMAC-SHA256)."""
+    import hashlib
+    import hmac
+    import uuid
+    ak, sk = cfg.get("ak"), cfg.get("sk")
+    if not (ak and sk):
+        raise RuntimeError("aliyun: no ALIYUN_ACCESS_KEY_ID/SECRET for "
+                           "auto token refresh")
+    host = ("modelstudio.ap-southeast-1.aliyuncs.com"
+            if cfg.get("site") == "international"
+            else "modelstudio.cn-beijing.aliyuncs.com")
+    path = "/modelstudio/cli/generateAccessToken"
+    body = b"{}"
+    hashed = hashlib.sha256(body).hexdigest()
+    hdrs = {
+        "host": host,
+        "x-acs-action": "GenerateCLIAccessToken",
+        "x-acs-version": "2026-02-10",
+        "x-acs-date": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "x-acs-signature-nonce": str(uuid.uuid4()),
+        "x-acs-content-sha256": hashed,
+        "content-type": "application/json",
+    }
+    keys = sorted(k for k in hdrs
+                  if k == "host" or k == "content-type" or k.startswith("x-acs-"))
+    canon = "".join(f"{k}:{hdrs[k]}\n" for k in keys)
+    signed = ";".join(keys)
+    canon_req = "\n".join(["POST", path, "", canon, signed, hashed])
+    sts = ("ACS3-HMAC-SHA256\n"
+           + hashlib.sha256(canon_req.encode()).hexdigest())
+    sig = hmac.new(sk.encode(), sts.encode(), hashlib.sha256).hexdigest()
+    hdrs["authorization"] = (f"ACS3-HMAC-SHA256 Credential={ak},"
+                             f"SignedHeaders={signed},Signature={sig}")
+    req = urllib.request.Request(f"https://{host}{path}", data=body,
+                                 headers=hdrs, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            j = json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode()[:300]
+        raise RuntimeError(
+            f"aliyun cli token HTTP {e.code}: {detail}") from e
+    tok = j.get("cliAccessToken")
+    if not tok:
+        raise RuntimeError(f"aliyun cli token: {str(j)[:200]}")
+    return tok
+
+
+def _aliyun_save_token(cfg, token):
+    """Persist a minted console token into aliyun_console.env (the same
+    file _aliyun_console_cfg reads), keeping all other keys."""
+    cfg["token"] = token
+    path = "/opt/opencode-setup/aliyun_console.env"
+    keys = {}
+    order = []
+    if os.path.exists(path):
+        with open(path) as f:
+            for line in f:
+                m = re.match(r'^(ALIYUN_\w+)\s*=', line)
+                if m:
+                    keys[m.group(1)] = None
+                    order.append(m.group(1))
+    keys["ALIYUN_CONSOLE_TOKEN"] = token
+    if "ALIYUN_CONSOLE_TOKEN" not in order:
+        order.insert(0, "ALIYUN_CONSOLE_TOKEN")
+    vals = dict(cfg)
+    mapping = {"ALIYUN_CONSOLE_TOKEN": "token",
+               "ALIYUN_CONSOLE_REGION": "region",
+               "ALIYUN_CONSOLE_SITE": "site",
+               "ALIYUN_CONSOLE_SWITCH_AGENT": "agent",
+               "ALIYUN_ACCESS_KEY_ID": "ak",
+               "ALIYUN_ACCESS_KEY_SECRET": "sk"}
+    out = []
+    for env_k in order:
+        if env_k == "ALIYUN_CONSOLE_TOKEN":
+            out.append(f"{env_k}={token}")
+        elif env_k in mapping and vals.get(mapping[env_k]) is not None:
+            out.append(f"{env_k}={vals[mapping[env_k]]}")
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        f.write("\n".join(out) + "\n")
+    os.replace(tmp, path)
 
 
 def _aliyun_console_call(api_name, data=None):
@@ -456,7 +550,23 @@ def _aliyun_console_call(api_name, data=None):
         j = json.loads(r.read().decode())
     inner = j.get("data") or {}
     if inner.get("success") is False and inner.get("errorCode"):
-        raise RuntimeError(f"aliyun console: {inner['errorCode']}")
+        code = str(inner["errorCode"])
+        if "NotLogined" in code:
+            # Console token expired — mint a fresh one via signed OpenAPI
+            # (AK/SK in aliyun_console.env) and retry the call once.
+            new_tok = _aliyun_cli_token(cfg)
+            _aliyun_save_token(cfg, new_tok)
+            req = urllib.request.Request(url, data=body, headers={
+                "Authorization": f"Bearer {new_tok}",
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "*/*"})
+            with urllib.request.urlopen(req, timeout=30) as r2:
+                j = json.loads(r2.read().decode())
+            inner = j.get("data") or {}
+            if inner.get("success") is False and inner.get("errorCode"):
+                raise RuntimeError(f"aliyun console: {inner['errorCode']}")
+        else:
+            raise RuntimeError(f"aliyun console: {inner['errorCode']}")
     payload = (inner.get("DataV2") or {}).get("data") or {}
     return payload.get("data") or payload
 
@@ -1199,6 +1309,124 @@ def _norm_kimi_usages(raw):
              "interval": win("limit_5h"), "weekly": win("limit_7d")}]
 
 
+# Xiaomi MiMo Token Plan — platform.xiaomimimo.com web session.
+# The plan API key cannot read the quota (401 -> account.xiaomi.com
+# serviceLogin); the platform answers only the browser Cookie.
+# Cookie lives in mimo_session.env; when api-platform_serviceToken
+# expires, the platform-side ph/slh hashes cannot re-mint it (they are
+# service-scoped — account.xiaomi.com answers 70016). A real relogin is
+# only possible with the ACCOUNT-level passport credentials
+# (userId + cUserId + passToken + ssecurity): serviceLogin?sid=api-platform
+# replays them and re-issues serviceToken via the /sts callback.
+_MIMO_ENV = "/opt/opencode-setup/mimo_session.env"
+_MIMO_BASE = "https://platform.xiaomimimo.com"
+
+
+def _mimo_cfg():
+    vals = {}
+    if os.path.exists(_MIMO_ENV):
+        with open(_MIMO_ENV) as f:
+            for line in f:
+                m = re.match(r'^(MIMO_\w+)\s*=\s*(.*)$', line)
+                if m:
+                    v = m.group(2).strip().strip('"').strip("'")
+                    vals[m.group(1)] = v
+    if not vals.get("MIMO_COOKIE"):
+        raise RuntimeError("MIMO_COOKIE not set in mimo_session.env")
+    return vals
+
+
+def _mimo_save(cfg):
+    tmp = _MIMO_ENV + ".tmp"
+    with open(tmp, "w") as f:
+        for k in sorted(cfg):
+            f.write(f"{k}={cfg[k]}\n")
+    os.replace(tmp, _MIMO_ENV)
+
+
+def _mimo_get(cfg, path):
+    req = urllib.request.Request(
+        _MIMO_BASE + path,
+        headers={
+            "Cookie": cfg["MIMO_COOKIE"],
+            "Accept": "application/json",
+            "Accept-Language": "en",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) hcproxy/1.0",
+        })
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            raise RuntimeError(f"mimo auth expired: HTTP {e.code}")
+        raise
+
+
+def _mimo_relogin(cfg):
+    """Re-issue api-platform_serviceToken via Xiaomi passport replay.
+
+    Requires account-level creds in mimo_session.env:
+    MIMO_USERID / MIMO_CUSERID / MIMO_PASS_TOKEN / MIMO_SSECURITY —
+    taken from the account.xiaomi.com cookie jar, NOT the platform ones.
+    Returns updated cfg dict with a rewritten MIMO_COOKIE.
+    """
+    import http.cookiejar
+    pt, uid = cfg.get("MIMO_PASS_TOKEN"), cfg.get("MIMO_USERID")
+    if not (pt and uid):
+        raise RuntimeError(
+            "mimo relogin needs MIMO_PASS_TOKEN + MIMO_USERID "
+            "(account.xiaomi.com cookies) in mimo_session.env")
+    jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(
+        urllib.request.HTTPCookieProcessor(jar))
+    acct = (f"userId={uid}; cUserId={cfg.get('MIMO_CUSERID') or uid}; "
+            f"passToken={pt}; ssecurity={cfg.get('MIMO_SSECURITY', '')}")
+    req = urllib.request.Request(
+        "https://account.xiaomi.com/pass/serviceLogin"
+        "?sid=api-platform&_json=true"
+        "&callback=" + urllib.parse.quote(
+            "https://platform.xiaomimimo.com/sts", safe=""),
+        headers={"Cookie": acct,
+                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+    raw = opener.open(req, timeout=30).read().decode()
+    raw = re.sub(r'^&&&START&&&', '', raw.strip())
+    j = json.loads(raw)
+    if j.get("code") not in (0, None) or j.get("result") == "error":
+        raise RuntimeError(
+            f"mimo relogin failed: {j.get('code')} "
+            f"{j.get('description')}")
+    loc = j.get("location")
+    if not loc:
+        raise RuntimeError("mimo relogin: no sts location in response")
+    opener.open(loc, timeout=30).read()  # /sts sets serviceToken cookies
+    fresh = {c.name: c.value for c in jar
+             if c.name in ("api-platform_serviceToken", "api-platform_slh",
+                           "api-platform_ph", "userId")}
+    if not fresh.get("api-platform_serviceToken"):
+        raise RuntimeError("mimo relogin: sts callback set no serviceToken")
+    cookie = ("cookie-preferences={\"analytics\":true}; "
+              + "; ".join(f"{k}={v}" for k, v in fresh.items()))
+    cfg["MIMO_COOKIE"] = cookie
+    _mimo_save(cfg)
+    return cfg
+
+
+def _mimo_windows(p):
+    """MiMo Token Plan quota -> normalized windows (usage + detail)."""
+    cfg = _mimo_cfg()
+    try:
+        usage = _mimo_get(cfg, "/api/v1/tokenPlan/usage")
+    except RuntimeError:
+        cfg = _mimo_relogin(cfg)
+        usage = _mimo_get(cfg, "/api/v1/tokenPlan/usage")
+    detail = {}
+    try:
+        detail = _mimo_get(cfg, "/api/v1/tokenPlan/detail")
+    except Exception:
+        pass
+    return _norm_mimo_usage({"usage_resp": usage, "detail_resp": detail})
+
+
 def _norm_mimo_usage(raw):
     """Xiaomi MiMo tokenPlan usage (+ detail) -> normalized window list.
 
@@ -1283,8 +1511,9 @@ _LIMIT_PROVIDERS = {
     },
     "mimo": {
         # Xiaomi MiMo Token Plan. Quota lives behind the platform's web-SSO
-        # session — the passthrough replays the session Cookie from config.
-        # Cookie will eventually expire -> replace in config.yaml.
+        # session — read directly with the Cookie from mimo_session.env.
+        # Auto-relogin works once MIMO_PASS_TOKEN/MIMO_USERID (account-level
+        # account.xiaomi.com creds) are added to the env file.
         "label": "MiMo Token Plan (Xiaomi)",
         "models": {
             "mimo-v2.5", "mimo-v2.5-pro",
@@ -1293,9 +1522,7 @@ _LIMIT_PROVIDERS = {
             "voice/xiaomi/mimo-v2.5-tts-voiceclone",
             "voice/xiaomi/mimo-v2.5-tts-voicedesign",
         },
-        "endpoint": "/mimo/api/v1/tokenPlan/usage",
-        "endpoint_detail": "/mimo/api/v1/tokenPlan/detail",
-        "normalize": _norm_mimo_usage,
+        "local": _mimo_windows,
     },
     "alicoding": {
         # Alibaba Cloud Coding Plan (coding-intl.dashscope.aliyuncs.com).
