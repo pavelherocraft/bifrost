@@ -66,6 +66,7 @@ _REASONING_CAPABLE = {
     "tencent/mimo-v2.6-pro (reserved - use when main is exhausted)",
     "tencent/mimo-v2.6-flash (reserved - use when main is exhausted)",
     "stepfun/step-5-preview", "stepfun/step-3.5-flash-2603", "stepfun/step-3.7-flash",
+    "stepfun/step-5-preview (reserved - use when main is exhausted)",
     "tencent/Kimi K3 (reserved - use when main is exhausted)",
     "tencent/Hy4",
     "tencent/Hy4 (reserved - use when main is exhausted)",
@@ -153,6 +154,11 @@ _REASONING_VARIANTS = {
         "high":   {"reasoningEffort": "high"},
     },
     "stepfun/step-5-preview": {
+        "low":  {"reasoningEffort": "low"},
+        "high": {"reasoningEffort": "high"},
+        "max":  {"reasoningEffort": "max"},
+    },
+    "stepfun/step-5-preview (reserved - use when main is exhausted)": {
         "low":  {"reasoningEffort": "low"},
         "high": {"reasoningEffort": "high"},
         "max":  {"reasoningEffort": "max"},

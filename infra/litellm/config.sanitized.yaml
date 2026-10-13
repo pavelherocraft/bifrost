@@ -492,6 +492,9 @@ litellm_settings:
     stepfun/step-5-preview:
       input_cost_per_token: 1.0e-06
       output_cost_per_token: 2.7e-06
+    stepfun/step-5-preview (reserved - use when main is exhausted):
+      input_cost_per_token: 1.0e-06
+      output_cost_per_token: 2.7e-06
     step-5-preview:
       input_cost_per_token: 1.0e-06
       output_cost_per_token: 2.7e-06
@@ -707,6 +710,8 @@ router_settings:
     - tencent/mimo-v2.6-pro (reserved - use when main is exhausted)
   - xiaomi/mimo-v2.6-flash:
     - tencent/mimo-v2.6-flash (reserved - use when main is exhausted)
+  - stepfun/step-5-preview:
+    - stepfun/step-5-preview (reserved - use when main is exhausted)
 mcp_servers:
   media:
     alias: Johnny the Knight MCP

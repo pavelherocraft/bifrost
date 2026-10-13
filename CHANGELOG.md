@@ -4,6 +4,28 @@
 
 ---
 
+### [2026-10-13] — Step-5 Preview: PAYG-деплой + fallback
+
+StepFun принимает тот же API-ключ на обоих эндпоинтах — проверено
+`POST api.stepfun.ai/v1` → 200 (плановый ключ работает и на PAYG).
+Отдельный ключ не нужен; условие — PAYG-баланс/постоплата на аккаунте.
+
+- Новый DB-деплой `stepfun/step-5-preview (reserved - use when main is
+  exhausted)` — `api_base https://api.stepfun.ai/v1` (PAYG), тот же
+  upstream-ключ, `custom_openai`, model_info идентичен плановому
+- `router_settings.fallbacks`: `stepfun/step-5-preview` → PAYG-резерв;
+  при исчерпании квоты/429 планового деплоя запросы уходят в оплачиваемый
+- Добавлен в `models` всех 12 команд (как остальные reserved-модели)
+- model_cost продублирован; api.py: `_REASONING_CAPABLE` +
+  `_REASONING_VARIANTS` (low/high/max) для reserved-имени
+- Проверено через прокси с временным VK: HTTP 200, reasoning-ответ
+  (VK удалён)
+
+⚠️ PAYG-деплой расходует реальный баланс — fallback срабатывает
+автоматически на ошибках планового деплоя.
+
+---
+
 ### [2026-10-12] — Удалены MiniMax-M2.5 и M2.7 (все версии)
 
 Убраны `MiniMax-M2.5`, `MiniMax-M2.5-highspeed`, `MiniMax-M2.7`,
