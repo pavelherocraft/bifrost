@@ -4,6 +4,28 @@
 
 ---
 
+### [2026-10-13] — Tencent: прямой доступ только PAYG/deepseek, план — fallback
+
+У `tencent/*` разведены эндпоинты: `/v1` = PAYG, `/plan/v3` = Token Plan
+(общий резервный пул). Прямой доступ к плановым деплоям снят — план
+работает только через цепочки fallbacks.
+
+- Из команд убрано всё плановое tencent-кроме Agents/All Access:
+  фактически только `tencent/Hy4` был убран по ошибке и **возвращён** —
+  он PAYG (`/v1`); убранных плановых деплоев и не было в teams
+- `tencent/Hy3` (PAYG `/v1`) — остаётся только у Agents и All Access
+- `tencent/deepseek-v4-pro-0813` (plan/v3) — оставлен во всех командах
+  по исключению «deepseek-модели»
+- Все `* (reserved - use when main is exhausted)` (plan/v3) — остаются в
+  командах как fallback-цели для GLM/Kimi/MiMo/Hy4
+- Ключи: per-key models не содержали tencent — UPDATE по ключам не
+  потребовался
+
+Итог прямого tencent-доступа: Hy4 (PAYG) + deepseek (план) у всех
+команд; Hy3 — Agents/All Access; остальной план — только fallback.
+
+---
+
 ### [2026-10-13] — «Лимиты»: StepFun PAYG-баланс
 
 На карточку StepFun добавлен `extra`-бар «PAYG баланс»: официальный
