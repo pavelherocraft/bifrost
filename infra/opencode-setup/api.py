@@ -692,6 +692,7 @@ def _stepfun_cfg():
         "appid": vals.get("STEPFUN_APPID", "20700"),
         "base": vals.get("STEPFUN_BASE_URL",
                         "https://platform.stepfun.ai"),
+        "api_key": vals.get("STEPFUN_API_KEY", ""),
     }
 
 
@@ -767,6 +768,36 @@ def _stepfun_windows(p):
     except Exception:
         pass
 
+    # PAYG balance via the official data-plane GET /v1/accounts — the plan
+    # key is accepted on api.stepfun.ai/v1 too, so no separate credential
+    # or console session is needed. Failures must not break the plan card.
+    payg_extra = []
+    if cfg.get("api_key"):
+        try:
+            req = urllib.request.Request(
+                "https://api.stepfun.ai/v1/accounts",
+                headers={"Authorization": "Bearer " + cfg["api_key"]})
+            acc = json.loads(
+                urllib.request.urlopen(req, timeout=15).read().decode())
+            bal = round(float(acc.get("balance") or 0), 2)
+            cash = round(float(acc.get("total_cash_balance") or 0), 2)
+            vouch = round(float(acc.get("total_voucher_balance") or 0), 2)
+            bar = {"title": "PAYG баланс",
+                   "remaining_count": bal, "unit": "$",
+                   "resets_in_ms": None, "end_time": None}
+            if cash > 0:
+                bar["total_count"] = cash
+                bar["usage_count"] = round(cash - bal, 2)
+                bar["remaining_percent"] = round(
+                    (bal + vouch) / cash * 100, 1)
+            payg_extra.append(bar)
+            if vouch > 0:
+                payg_extra.append({"title": "Ваучеры",
+                                   "remaining_count": vouch, "unit": "$",
+                                   "resets_in_ms": None, "end_time": None})
+        except Exception:
+            pass
+
     def ms_from_s(v):
         try:
             n = int(v)
@@ -801,6 +832,7 @@ def _stepfun_windows(p):
                 "end_time": end_ms,
             },
             "weekly": None,
+            "extra": payg_extra,
         }]
 
     def win(left_rate, reset_s):
@@ -820,6 +852,7 @@ def _stepfun_windows(p):
                         data.get("five_hour_usage_reset_time")),
         "weekly": win(data.get("weekly_usage_left_rate"),
                       data.get("weekly_usage_reset_time")),
+        "extra": payg_extra,
     }]
 
 

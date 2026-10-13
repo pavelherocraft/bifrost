@@ -4,6 +4,23 @@
 
 ---
 
+### [2026-10-13] — «Лимиты»: StepFun PAYG-баланс
+
+На карточку StepFun добавлен `extra`-бар «PAYG баланс»: официальный
+data-plane `GET api.stepfun.ai/v1/accounts` принимает тот же плановый
+API-ключ (проверено — отдельный ключ не нужен). Отдаёт
+`balance`/`total_cash_balance`/`total_voucher_balance` в USD;
+ваучерный остаток при наличии — отдельным баром.
+
+- Ключ лежит в `STEPFUN_API_KEY` в stepfun_session.env — баланс не
+  зависит от Oasis-сессии и работает даже при протухшей куке
+- Фейл баланс-запроса не ломает карточку плана (try/except → просто
+  нет extra-бара)
+- Учёт: бар покрывает PAYG-деплой
+  `stepfun/step-5-preview (reserved…)` и любые другие /v1-списания
+
+---
+
 ### [2026-10-13] — Step-5 Preview: PAYG-деплой + fallback
 
 StepFun принимает тот же API-ключ на обоих эндпоинтах — проверено
