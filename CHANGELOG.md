@@ -4,6 +4,27 @@
 
 ---
 
+### [2026-10-13] — GLM-5.3: num_retries=4 на z.ai-деплоях
+
+Диагностика «fallback уходит на tencent мимо res»: цепочка
+`GLM-5.3 → GLM-5.3 (res) → tencent` работала корректно — res-деплои
+обслужили 1046 запросов за день, fallback-хопы по моделям команды не
+фильтруются. Всплески tencent (часы 09–11) вызваны оконными
+rate-limit'ами z.ai Coding Plan (TOKENS_LIMIT 5h + weekly) —
+конкретные запросы ловили 429 на обоих z.ai-деплоях при живой
+месячной квоте; также `BadRequestError 1261 "Prompt exceeds max
+length"` триггерит fallback на обоих z.ai одинаково.
+
+Чтобы запросы дольше держались на z.ai до ухода на tencent:
+- `litellm_params.num_retries = 4` (было глобальное 2) на четырёх
+  z.ai-деплоях: `GLM-5.3`, `GLM-5.3 (res)`, `GLM-5.3-Flash`,
+  `GLM-5.3-Flash (res)` — роутер читает его через
+  `_set_deployment_num_retries_on_exception`
+- Глобальный `router_settings.num_retries: 2` не тронут — на прочие
+  модели поведение не меняется
+
+---
+
 ### [2026-10-13] — Tencent: прямой доступ только PAYG/deepseek, план — fallback
 
 У `tencent/*` разведены эндпоинты: `/v1` = PAYG, `/plan/v3` = Token Plan
