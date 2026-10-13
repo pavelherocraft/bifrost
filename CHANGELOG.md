@@ -4,6 +4,28 @@
 
 ---
 
+### [2026-10-13] — Kimi K2.8: реальные лимиты + reasoning-варианты
+
+`Kimi K2.8` (`kimi-for-coding` на api.kimi.com) имел устаревшие
+метаданные от K2.7: контекст 256K / output 32K, без vision — и
+отсутствовал в `_REASONING_VARIANTS`, из-за чего opencode получал
+только `options.thinking` (Anthropic-style, который opencode
+игнорирует для openai-compatible провайдеров) — настройки reasoning
+были «невидимы».
+
+- `model_info`: `max_input_tokens` 262144→1048576 (K2.8 — 1M окно,
+  Moonshot changelog 2026-09-11), `max_tokens` 32768→131072
+  (upstream принимает ≥262K — проверено), `supports_vision` и
+  `supports_video_input` включены
+- api.py `_REASONING_VARIANTS`: добавлен `Kimi K2.8` с циклом
+  low/high/max → opencode.json теперь получает
+  `options.reasoningEffort` + `variants` — переключатель усилия
+  работает
+- Проверено на /models: `context: 1048576, output: 131072,
+  vision: true, video: true, variants: {low,high,max}`
+
+---
+
 ### [2026-10-13] — GLM-5.3: num_retries=4 на z.ai-деплоях
 
 Диагностика «fallback уходит на tencent мимо res»: цепочка

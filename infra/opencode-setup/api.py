@@ -101,6 +101,13 @@ _REASONING_VARIANTS = {
         "high": {"reasoningEffort": "high"},
         "max":  {"reasoningEffort": "max"},
     },
+    # kimi-for-coding = K2.8 Preview: same low/high/max efforts as K3
+    # (Moonshot changelog 2026-09-11, default max), 1M context.
+    "Kimi K2.8": {
+        "low":  {"reasoningEffort": "low"},
+        "high": {"reasoningEffort": "high"},
+        "max":  {"reasoningEffort": "max"},
+    },
     "MiniMax-M3": {
         "low":    {"reasoningEffort": "low"},
         "medium": {"reasoningEffort": "medium"},
