@@ -72,7 +72,7 @@ _REASONING_CAPABLE = {
     "tencent/Hy4 (reserved - use when main is exhausted)",
     "tencent/Hy3",
     "kimi-k2-0905-preview", "kimi-k2-turbo-preview",
-    "Kimi K2.6", "Kimi K2.7", "Kimi K3",
+    "Kimi K2.6", "Kimi K2.7 HighSpeed", "Kimi K3",
     "Kimi K3-256K", "Kimi K2.8",
     "MiniMax-M3", "MiniMax-M3.1-Flash-Preview",
     "nvidia/nemotron-3-ultra-550b-a55b",
@@ -1566,7 +1566,7 @@ _LIMIT_PROVIDERS = {
         # Both Kimi credentials are keys on the same Kimi Code account, so
         # all four deployments share one quota — a single card is enough.
         "label": "Kimi Code",
-        "models": {"Kimi K2.7", "Kimi K3", "Kimi K2.8", "Kimi K3-256K"},
+        "models": {"Kimi K2.7 HighSpeed", "Kimi K3", "Kimi K2.8", "Kimi K3-256K"},
         "endpoint": "/kimi/coding/v1/usages",
         "normalize": _norm_kimi_usages,
     },

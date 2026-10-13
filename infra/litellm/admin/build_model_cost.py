@@ -70,7 +70,7 @@ OVERRIDES = {
     "qwen/qwen3.8-flash":     "qwen/qwen3.8-flash",
     "qwen/qwen3.8-max":       "qwen/qwen3.8-max",
     "Kimi K2.6":              "moonshotai/kimi-k2.6",
-    "Kimi K2.7":              "moonshotai/kimi-k2.7-code",
+    "Kimi K2.7 HighSpeed":    "moonshotai/kimi-k2.7-code",
     "Kimi K3":                "moonshotai/kimi-k3",
     "kimi-k2.6":              "moonshotai/kimi-k2.6",
     "kimi-k2.7":              "moonshotai/kimi-k2.7-code",

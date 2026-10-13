@@ -4,6 +4,28 @@
 
 ---
 
+### [2026-10-13] — Kimi K2.7 → K2.7 HighSpeed (подписочный endpoint)
+
+PAYG-деплой `Kimi K2.7` (`moonshot/kimi-k2.7`) заменён на
+`Kimi K2.7 HighSpeed` (`kimi-for-coding-highspeed` на
+api.kimi.com/coding/v1, та же KimiCode-креденшела) — обычный K2.7
+Code в подписке выпилен Moonshot (под `kimi-for-coding` теперь
+K2.8), остался только HighSpeed-вариант: 256K контекст,
+vision+video, thinking always-ON, вывод в 5–6× быстрее.
+
+- `LiteLLM_ProxyModelTable`: +K2.7 HighSpeed (262144/131072/
+  vision/video), −Kimi K2.7
+- `LiteLLM_TeamTable`: замена в 11 командах, ключи не трогали
+  (per-key списки K2.7 не содержали)
+- `_REASONING_CAPABLE` + kimi-лимит-провайдер (api.py),
+  `_MERGE_FIRST_CHUNK_MODELS`/`_KIMI_EMPTY_MSG_MODELS` (hook),
+  `build_model_cost.py` (→ moonshotai/kimi-k2.7-code),
+  `model_cost` в config.yaml — всё переименовано
+- Проверено: /v1/models, live-инференс 200 (reasoning_tokens: 42),
+  /models отдаёт context 262144
+
+---
+
 ### [2026-10-13] — Kimi K2.8: реальные лимиты + reasoning-варианты
 
 `Kimi K2.8` (`kimi-for-coding` на api.kimi.com) имел устаревшие

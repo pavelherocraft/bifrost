@@ -48,7 +48,7 @@ OPENCODE_UA = os.environ.get(
 # Models whose first streaming chunk lacks non-empty reasoning_content.
 # Hook will buffer+merge to ensure first yielded chunk has RC.length > 0.
 _MERGE_FIRST_CHUNK_MODELS = (
-    "Kimi K2.6", "Kimi K2.7", "Kimi K3",
+    "Kimi K2.6", "Kimi K2.7 HighSpeed", "Kimi K3",
     "Kimi K3-256K", "Kimi K2.8",
 )
 
@@ -56,7 +56,7 @@ _MERGE_FIRST_CHUNK_MODELS = (
 # content is null/empty AND there are no tool_calls. We patch these in
 # async_pre_call_hook by replacing empty content with a single space.
 _KIMI_EMPTY_MSG_MODELS = (
-    "Kimi K2.6", "Kimi K2.7", "Kimi K3",
+    "Kimi K2.6", "Kimi K2.7 HighSpeed", "Kimi K3",
     "Kimi K3-256K", "Kimi K2.8",
 )
 
