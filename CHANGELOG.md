@@ -23,6 +23,9 @@ detect_feature_flags → generate_findings/report → check_findings,
   `/ipa-upload` (inbox, VK, 4G) → 127.0.0.1:9102
 - VM: /opt/ipa-audit-mcp + ipa-audit-mcp.service; LiteLLM config.yaml +
   mcp_servers.ipa_audit (allow_all_keys, extra_headers authorization)
+- `LiteLLM_ObjectPermissionTable.mcp_servers += ipa_audit` для 11 команд
+  (все, где уже был `media`; Analytics без media — без ipa_audit) —
+  иначе сервер не доходил до /mcp → opencode.json
 - Проверено end-to-end на TapTapBuilder 5.4.0 (92MB IPA): extract
   (IL2CPP auto), все 6 фаз rc=0, findings/report/check GREEN,
   review V1-V10 PASS; 401 без VK на upload
