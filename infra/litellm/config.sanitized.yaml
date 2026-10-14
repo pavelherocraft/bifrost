@@ -726,7 +726,7 @@ mcp_servers:
     transport: http
     allow_all_keys: true
     extra_headers: ["authorization", "x-litellm-api-key"]
-    description: "IPA Audit MCP — App Store 2.3.1(a) IPA audit pipeline: extract, plist/frameworks/strings/assets/flags analysis, signature-pack greps, triage → findings → report, V1-V10 review"
+    description: "IPA Audit MCP — distributes the App Store 2.3.1(a) audit toolkit (skill bundle + references) for fully-local audits; no server-side execution"
 
   zai_web_search:
     url: https://api.z.ai/api/mcp/web_search_prime/mcp

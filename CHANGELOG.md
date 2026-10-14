@@ -31,6 +31,10 @@ detect_feature_flags → generate_findings/report → check_findings,
   скиллы + signature-паки + agent .md) и промпт
   `ipa-audit-local-workflow` — агент скачивает бандл в проект и гоняет
   весь аудит локально, IPA/evidence не покидают машину
+- Серверный режим полностью снят: убраны тулы ipa_audit_start/run/read/
+  context/triage_input/finish/review/status/list, роуты /ipa-upload и
+  /ipa-files, nginx-локейшены и inbox/audits на VM — сервер теперь
+  только раздатчик (toolkit + ipa_audit_reference + local-workflow)
 - Проверено end-to-end на TapTapBuilder 5.4.0 (92MB IPA): extract
   (IL2CPP auto), все 6 фаз rc=0, findings/report/check GREEN,
   review V1-V10 PASS; 401 без VK на upload
