@@ -29,12 +29,14 @@ Deploy layout (this file's parent dir = project root expected by scripts):
 
 import asyncio
 import hashlib
+import io
 import json
 import os
 import re
 import sqlite3
 import sys
 import uuid
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Optional
@@ -716,6 +718,29 @@ async def ipa_audit_reference(
             "truncated": len(txt) > MAX_READ_CHARS}
 
 
+@mcp.tool()
+async def ipa_audit_toolkit(ctx: Context) -> dict:
+    """Local-audit mode: returns the download info for the skill bundle
+    (.opencode/skills + tools/signatures + agent .md files). Download it
+    with your Bearer VK, unzip into the target project root, then run the
+    whole audit locally — the IPA and all evidence never leave your
+    machine. Follow the 'ipa-audit-local-workflow' prompt."""
+    _vk(ctx)
+    return {
+        "bundle_url": f"{PUBLIC_BASE}/ipa-audit-bundle.zip",
+        "auth": "Authorization: Bearer <your LiteLLM VK>",
+        "layout": [
+            ".opencode/skills/ipa-audit/{scripts,data} — pipeline scripts",
+            ".opencode/skills/ipa-audit-review/scripts — V1-V10 validator",
+            ".opencode/agents/{audit_IPA,review_audit_IPA}.md",
+            "tools/signatures/ — 14 signature packs",
+        ],
+        "requirements": "Python 3.10+ (optional: pip install lief pyyaml lzfse)",
+        "then": "load prompt 'ipa-audit-local-workflow' and run phases via "
+                "local shell per SKILL.md",
+    }
+
+
 # ---------- prompts ----------
 
 @mcp.prompt("ipa-audit-workflow")
@@ -765,6 +790,24 @@ def review_workflow() -> str:
    then ipa_audit_finish again."""
 
 
+@mcp.prompt("ipa-audit-local-workflow")
+def local_workflow() -> str:
+    return """Fully-local IPA audit (nothing leaves your machine):
+
+1. ipa_audit_toolkit() → bundle URL.
+2. Download: curl -H "Authorization: Bearer <VK>" -o ipa-audit-bundle.zip
+   https://hcbifrost.herocraft.com/ipa-audit-bundle.zip
+   unzip into the PROJECT ROOT (keeps .opencode/ + tools/ layout).
+3. Then work locally per .opencode/skills/ipa-audit/SKILL.md —
+   scripts resolve the project root from their own path:
+     python .opencode/skills/ipa-audit/scripts/extract_ipa.py --ipa app.ipa --audits-root audits
+   Phase gates: extract → plist → frameworks → strings → grep → assets
+   → flags → your triage → generate_findings → generate_report →
+   check_findings; review via ipa-audit-review/scripts/validate_audit.py.
+   Optional: pip install lief pyyaml lzfse.
+The audit dir, report and evidence stay under <project>/audits/ locally."""
+
+
 # ---------- HTTP routes ----------
 
 @mcp.custom_route("/ipa-upload", methods=["POST"])
@@ -794,6 +837,46 @@ async def ipa_upload(request: Request):
         dest.unlink(missing_ok=True)
         return JSONResponse({"error": "empty body"}, status_code=400)
     return JSONResponse({"ipa_name": dest.name, "bytes": size})
+
+
+_BUNDLE_CACHE: dict = {}
+
+
+def _build_bundle() -> bytes:
+    """Zip the vendored toolkit (.opencode/ + tools/) for local audits."""
+    items = sorted(p for p in ROOT.rglob("*") if p.is_file()
+                   and "venv" not in p.parts and "incoming" not in p.parts
+                   and "audits" not in p.parts and "__pycache__" not in p.parts
+                   and p.name not in ("server.py", "requirements.txt",
+                                      "registry.json", "rate_limits.sqlite3")
+                   and not p.name.endswith(".pyc"))
+    latest = max((p.stat().st_mtime for p in items), default=0)
+    if _BUNDLE_CACHE.get("mtime") == latest:
+        return _BUNDLE_CACHE["data"]
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for p in items:
+            z.writestr(p.relative_to(ROOT).as_posix(), p.read_bytes())
+    _BUNDLE_CACHE.update({"mtime": latest, "data": buf.getvalue()})
+    return _BUNDLE_CACHE["data"]
+
+
+@mcp.custom_route("/ipa-audit-bundle.zip", methods=["GET"])
+async def ipa_audit_bundle(request: Request):
+    """Download the skill bundle for fully-local audits.
+    Auth: Bearer LiteLLM VK (validated against the proxy)."""
+    auth = request.headers.get("authorization", "")
+    tok = auth.replace("Bearer ", "").strip()
+    if not tok:
+        return JSONResponse({"error": "missing Bearer VK"}, status_code=401)
+    async with httpx.AsyncClient(base_url=LITELLM, timeout=20) as c:
+        vr = await c.get("/v1/models", headers={"Authorization": f"Bearer {tok}"})
+    if vr.status_code != 200:
+        return JSONResponse({"error": "invalid VK"}, status_code=401)
+    from starlette.responses import Response
+    return Response(_build_bundle(), media_type="application/zip",
+                    headers={"Content-Disposition":
+                             "attachment; filename=ipa-audit-bundle.zip"})
 
 
 @mcp.custom_route("/ipa-files/{audit_id}/{path:path}", methods=["GET"])

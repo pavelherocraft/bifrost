@@ -26,6 +26,11 @@ detect_feature_flags → generate_findings/report → check_findings,
 - `LiteLLM_ObjectPermissionTable.mcp_servers += ipa_audit` для 11 команд
   (все, где уже был `media`; Analytics без media — без ipa_audit) —
   иначе сервер не доходил до /mcp → opencode.json
+- Local-audit режим (toolkit delivery): тулза `ipa_audit_toolkit`,
+  эндпоинт `GET /ipa-audit-bundle.zip` (VK-auth, zip всего vendor:
+  скиллы + signature-паки + agent .md) и промпт
+  `ipa-audit-local-workflow` — агент скачивает бандл в проект и гоняет
+  весь аудит локально, IPA/evidence не покидают машину
 - Проверено end-to-end на TapTapBuilder 5.4.0 (92MB IPA): extract
   (IL2CPP auto), все 6 фаз rc=0, findings/report/check GREEN,
   review V1-V10 PASS; 401 без VK на upload
