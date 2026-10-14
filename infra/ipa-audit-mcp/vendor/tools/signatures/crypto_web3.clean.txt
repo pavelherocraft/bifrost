@@ -1,0 +1,6 @@
+WalletConnect|relay\.walletconnect\.com|bridge\.walletconnect\.org|reown|pairingTopic|symKey|wc:
+web3swift|Web3Core|EthereumAddress|CodableTransaction|eth_sendRawTransaction|personal_sign|eth_signTypedData|erc20ABI|keystore
+TrustWalletCore|WalletCore|TWPrivateKey|TWHDWallet|TWAnySigner|m/44'/60'
+MetaMaskSDK|metamask:|cbwallet:|wallet_switchEthereumChain|@base-org
+buy\.moonpay\.com|buy-sandbox\.moonpay\.com|api\.moonpay\.com|ramp\.network|RampSDK|api\.transak\.com|TransakSDK|banxa|simplex
+secp256k1_ecdsa|BitcoinKernel

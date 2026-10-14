@@ -1,0 +1,181 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "IPA audit findings.json v2.0 (PLAN.md:1342-1370 superset, D6)",
+  "type": "object",
+  "required": ["schema_version", "build", "summary", "counts", "verdict", "headline", "findings", "false_positives", "gating_matrix"],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": { "const": "2.0" },
+    "build": {
+      "type": "object",
+      "required": ["app", "version", "build_number", "ipa_sha256", "cryptid", "hybrid", "audit_date", "auditor", "tools"],
+      "properties": {
+        "app": { "type": "string" },
+        "version": { "type": "string" },
+        "build_number": { "type": "string" },
+        "ipa_sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+        "cryptid": { "type": "integer" },
+        "hybrid": { "enum": ["none", "rn", "flutter", "capacitor", "unity_il2cpp"] },
+        "audit_date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+        "auditor": { "type": "string" },
+        "tools": {
+          "type": "object",
+          "properties": {
+            "python": { "type": "string" },
+            "lief": { "type": ["string", "null"] },
+            "ipsw": { "type": ["string", "null"] },
+            "mobsf": { "type": ["string", "null"] }
+          }
+        }
+      }
+    },
+    "toolchain": {
+      "type": "object",
+      "properties": {
+        "planned_unavailable": { "type": "array", "items": { "type": "string" } },
+        "used_instead": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "phases_completed": { "type": "array", "items": { "type": "integer" } },
+    "phases_skipped": { "type": "object" },
+    "coverage": {
+      "type": "object",
+      "required": ["mach_o_targets_analysed", "strings_extracted", "signature_packs", "distinct_urls_hosts", "objc_classes_dumped", "assets_car_names", "il2cpp_metadata_scanned"],
+      "properties": {
+        "mach_o_targets_analysed": { "type": "integer" },
+        "strings_extracted": { "type": "integer" },
+        "signature_packs": { "type": "integer" },
+        "distinct_urls_hosts": { "type": "integer" },
+        "objc_classes_dumped": { "type": "integer" },
+        "assets_car_names": { "type": "integer" },
+        "il2cpp_metadata_scanned": { "type": "boolean" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["critical", "high", "medium", "low", "info", "false_positive"],
+      "properties": {
+        "critical": { "type": "integer" },
+        "high": { "type": "integer" },
+        "medium": { "type": "integer" },
+        "low": { "type": "integer" },
+        "info": { "type": "integer" },
+        "false_positive": { "type": "integer" }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "required": ["total_findings", "raw_hits_total", "raw_false_positive_hits", "false_positive_categories_filtered"],
+      "properties": {
+        "total_findings": { "type": "integer" },
+        "raw_hits_total": { "type": "integer" },
+        "raw_false_positive_hits": { "type": "integer" },
+        "false_positive_categories_filtered": { "type": "integer" }
+      }
+    },
+    "verdict": { "type": "string" },
+    "headline": { "type": "string" },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "severity", "confidence", "category", "pattern", "phase", "evidence", "declared_in_app_description", "reachable", "gated_by", "verdict", "remediation"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^(PAY|KYC|SSO|W3|POS|FLAG|URL|DL|L10N|ASSET|PLIST|ENT|DEAD|SEC|HYB|NORDIC|OB|ANL|SUB|GATE)-[0-9]{3}$"
+          },
+          "severity": { "enum": ["critical", "high", "medium", "low", "info"] },
+          "confidence": { "enum": ["confirmed", "probable", "lead"] },
+          "category": {
+            "enum": ["payment_sdk", "payment_gating", "payment_infrastructure", "payment_ui", "iap_violation",
+                     "kyc_sdk", "sso", "crypto_web3", "pos_ble_nfc", "feature_flag", "webview_url", "deep_link",
+                     "l10n", "asset", "plist", "entitlement", "dead_code", "secret", "hybrid_bundle",
+                     "nordic_appswitch", "open_banking", "analytics_ad", "subscription_sdk", "gating",
+                     "network_config", "provenance", "crypto"]
+          },
+          "pattern": { "type": "string" },
+          "phase": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?[a-z]?$" },
+          "evidence": {
+            "type": "object",
+            "required": ["file", "excerpt", "context_ref"],
+            "properties": {
+              "file": { "type": "string" },
+              "excerpt": { "type": "string" },
+              "context_ref": { "type": "string" }
+            }
+          },
+          "declared_in_app_description": { "type": ["boolean", "null"] },
+          "reachable": { "enum": ["yes", "no", "unknown"] },
+          "gated_by": {
+            "type": "array",
+            "items": { "enum": ["none", "region", "date", "test_account", "ab_experiment", "server_response", "feature_flag"] }
+          },
+          "verdict": { "enum": ["violation", "false_positive", "needs_review"] },
+          "remediation": { "type": "string" },
+          "resolved_in_build": { "type": ["string", "null"] },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "false_positives": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["pack", "hits", "explanation"],
+        "properties": {
+          "pack": { "type": "string" },
+          "hits": { "type": "integer" },
+          "explanation": { "type": "string" }
+        }
+      }
+    },
+    "gating_matrix": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["condition_type", "gate", "gated_screen", "finding"],
+        "properties": {
+          "condition_type": { "enum": ["region", "date", "test_account", "ab_experiment", "server_response", "feature_flag"] },
+          "gate": { "type": "string" },
+          "gated_screen": { "type": "string" },
+          "finding": { "type": "string" },
+          "severity": { "type": "string" }
+        }
+      }
+    },
+    "suppressions_applied": { "type": "array" },
+    "artifacts_created": { "type": "array", "items": { "type": "string" } },
+    "requires_docs_update": { "type": "boolean" }
+  },
+
+  "_custom_rules": {
+    "comment": "Enforced by generate_findings.py AND independently by validate_audit.py (D4/D6)",
+    "id_prefix_by_category": {
+      "payment_sdk": "PAY", "payment_gating": "GATE", "payment_infrastructure": "PAY",
+      "payment_ui": "PAY", "iap_violation": "PAY", "kyc_sdk": "KYC", "sso": "SSO",
+      "crypto_web3": "W3", "crypto": "W3", "pos_ble_nfc": "POS", "feature_flag": "FLAG",
+      "webview_url": "URL", "deep_link": "DL", "l10n": "L10N", "asset": "ASSET",
+      "plist": "PLIST", "entitlement": "ENT", "dead_code": "DEAD", "secret": "SEC",
+      "hybrid_bundle": "HYB", "nordic_appswitch": "NORDIC", "open_banking": "OB",
+      "analytics_ad": "ANL", "subscription_sdk": "SUB", "gating": "GATE",
+      "network_config": "URL", "provenance": "PLIST"
+    },
+    "arithmetic": [
+      "counts.raw_false_positive_hits == sum(false_positives[].hits)",
+      "counts.raw_hits_total == sum(evidence/p4_binary/hits/_summary.json values)",
+      "summary.<sev> == count(findings[] where severity==<sev> and verdict != false_positive)",
+      "summary.false_positive == count(findings[] where verdict == false_positive)",
+      "counts.total_findings == len(findings)",
+      "counts.false_positive_categories_filtered == len(false_positives)"
+    ],
+    "semantic": [
+      "confidence:confirmed requires reachable != 'unknown' OR non-empty notes justification",
+      "every evidence.excerpt (>=40 chars) must appear verbatim in evidence.file (whitespace-normalized)",
+      "evidence.file and evidence.context_ref must be relative, non-empty, Temp-free",
+      "phase is a string like '4.4' (never a bare number)",
+      "reachable is the 3-value string enum (never bool/null)",
+      "gated_by is always an array"
+    ]
+  }
+}

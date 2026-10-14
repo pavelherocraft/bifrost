@@ -4,6 +4,31 @@
 
 ---
 
+### [2026-10-14] — IPA Audit MCP: пайплайн аудита App Store 2.3.1(a) как MCP-сервер
+
+Новый сервис `ipa_audit` (FastMCP, :9102, за LiteLLM `mcp_servers`) — тонкая
+обёртка над скриптовым пайплайном аудита IPA из проекта iOs_banking_info:
+extract_ipa → parse_info_plist → analyze_frameworks → extract_strings →
+grep_packs (14 сигнатурных паков) → analyze_assets_urls →
+detect_feature_flags → generate_findings/report → check_findings,
+плюс независимый валидатор V1-V10 (ipa-audit-review).
+
+- `infra/ipa-audit-mcp/server.py` — тулзы ipa_audit_start/run/read/
+  context/triage_input/finish/review/status/list/reference + MCP-промпты
+  workflow/review; VK-авторизация через extra_headers; лимит 10
+  аудитов/день на VK (sqlite); фоновые job'ы с поллингом, т.к. LiteLLM
+  рвёт tool call через ~60с (grep по ~590K строк дольше)
+- `vendor/` — зафиксированная копия скриптов скиллов и signature-паков
+- nginx: `/ipa-files/` (артефакты по unguessable audit_id) и
+  `/ipa-upload` (inbox, VK, 4G) → 127.0.0.1:9102
+- VM: /opt/ipa-audit-mcp + ipa-audit-mcp.service; LiteLLM config.yaml +
+  mcp_servers.ipa_audit (allow_all_keys, extra_headers authorization)
+- Проверено end-to-end на TapTapBuilder 5.4.0 (92MB IPA): extract
+  (IL2CPP auto), все 6 фаз rc=0, findings/report/check GREEN,
+  review V1-V10 PASS; 401 без VK на upload
+
+---
+
 ### [2026-10-13] — Kimi K2.7 → K2.7 HighSpeed (подписочный endpoint)
 
 PAYG-деплой `Kimi K2.7` (`moonshot/kimi-k2.7`) заменён на

@@ -1,0 +1,22 @@
+LinkKit|PlaidLinkSession|LinkTokenConfiguration|link_token|publicToken|SUBMIT_ACCOUNT_NUMBER|SUBMIT_ROUTING_NUMBER|SUBMIT_CREDENTIALS|SELECT_INSTITUTION|CONNECT_INSTITUTION|MICRODEPOSITS_VERIFICATION|plaid\.com
+OnfidoConfig|OnfidoFlow|OnfidoResult|Onfido-Release|api\.onfido\.com|nationalIdentityCard|drivingLicence
+StripeIdentity|StripeIdentityBundle|IdentityVerificationSheet
+StripeFinancialConnections|FinancialConnectionsSheet
+IdensicMobileSDK|SNSMobileSDK|MRTDReader|sumsub\.com
+withpersona\.com|PersonaInlineViewController|itmpl_
+ShuftiPro|shuftipro\.com
+JumioCore|Netverify|jumio\.com|netverify\.com
+VeriffSdk|VeriffConfiguration|veriff\.me
+IDnowSDK|IDnowController|IDnowSettings|IDnowAppearance|IDnowAppDelegate|IDnowControllerDelegate|IDnowCertificateProvider|IDN_eIDRouter|idnow_vi|api\.idnow\.de|gateway\.idnow\.de|[A-Z0-9]{3}-[A-Z0-9]{5}
+iProov|IProov\.launch|IProovError|IProovPresentationDelegate|IProovViewDelegate|rp\.secure\.iproov\.me|secure\.iproov\.me
+FaceTecSDK|FaceTec|ZoomAuthentication|dev\.facetec\.com   # lead: [UNVERIFIED] — 0 публичных репо (§4.5)
+AU10TIX|au10tix\.com   # lead: [UNVERIFIED] — публичного iOS-репо нет (§4.5)
+TinkLink|Tink\.openUrl|connectAccountsForOneTimeAccess|link\.tink\.com|api\.tink\.com   # open banking Tink (Visa), deprecated для новых интеграций (§4.16)
+TrueLayerPaymentsSDK|TrueLayer\.Payments|truelayer\.com|pay\.truelayer\.com
+FinicityConnect|connect2\.finicity\.com|fastlink\.yodlee\.com|node\.yodlee\.com|api\.yapily\.com|atrium\.mx\.com|api\.mx\.com   # lead: WebView-интеграции, iOS SDK нет (§4.16)
+OktaOidc|OktaOidcConfig|OktaOidcStateManager|okta\.com
+MSALPublicClientApplication|acquireTokenWithParameters|login\.microsoftonline\.com
+PingOneSDK|assets\.pingone\.com|JOSESwift
+Auth0|CredentialsManager|WebAuth|DPoP|auth0\.com
+OIDAuthorizationService|OIDAuthState|AppAuth
+FIRAuth|FirebaseAuth|AWSCognitoIdentityProvider|AmplifySRP

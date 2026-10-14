@@ -1,0 +1,10 @@
+af_purchase|AFEventPurchase|AppsFlyerLib|AppsFlyerFramework|logEvent|onelink\.me|inapps\.appsflyer\.com|api2\.appsflyer\.com
+ADJEvent|setRevenue|trackEvent|logPurchase|app\.adjust\.com|\bAdjust\b
+BranchEvent|BranchEvent\.PURCHASE|BranchSDK|api2\.branch\.io
+sk_purchase|Singular\.xcframework|sdk-api-v1\.singular\.net
+TenjinSDK|transaction:andReceipt:|tenjin-skan\.com
+GADMobileAds|Google-Mobile-Ads-SDK|googlemobileads
+AppLovinSDK|ALSdk|MAXMediation|AppLovin-MAX
+IronSourceSDK|ISDemandOnly|UnityLevelPlay|LevelPlay
+FBAudienceNetwork|FBAdView|FBAdChoices
+SKStoreProductViewController|SKAdNetwork|NSAdvertisingAttributionReportEndpoint

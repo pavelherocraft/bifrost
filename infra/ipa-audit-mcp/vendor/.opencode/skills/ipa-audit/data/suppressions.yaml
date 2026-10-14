@@ -1,0 +1,13 @@
+# suppressions.yaml -- confirmed false positives, grows across audits (PLAN.md:1100, 1209).
+# Scope is ALWAYS per binary + pattern. Global (binary: "*") suppression of an
+# analytics_purchase pattern is refused by grep_packs.py (ред. 2 warning).
+#
+# Format:
+# suppressions:
+#   - binary: AppsFlyerLib.framework
+#     pattern: "af_purchase"
+#     pack: "analytics_purchase"   # optional; required for a global (binary: "*")
+#                                  # analytics_purchase suppression to be refused
+#     reason: "legal IAP attribution by analytics SDK"
+#     since: "2026-10-13"
+suppressions: []

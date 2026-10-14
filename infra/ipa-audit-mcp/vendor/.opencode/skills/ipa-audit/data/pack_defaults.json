@@ -1,0 +1,135 @@
+{
+  "_source": "PLAN.md:1224-1239 (Rev 2 auto-classification table) converted verbatim; entitlements row added (plan gap flagged in step 6 -- the PLAN table has no row for entitlements.txt although it is one of the 14 packs). Defaults only -- the LLM may override WITH a notes justification.",
+  "packs": {
+    "payment": {
+      "category": "payment_sdk",
+      "severity": "critical",
+      "verdict": "needs_review",
+      "note": "confirmed при кластере"
+    },
+    "kyc_banking": {
+      "category": "kyc_sdk",
+      "category_alt": "sso",
+      "category_alt_when": "pattern Okta/MSAL/Auth0/AppAuth/Firebase/Cognito -> sso, severity info",
+      "severity": "critical",
+      "severity_alt": "info",
+      "verdict": "needs_review"
+    },
+    "nordic_payment": {
+      "category": "deep_link",
+      "category_alt": "payment_sdk",
+      "severity": "high",
+      "severity_note": "high (схема в plist) / critical (вызов openURL)",
+      "verdict": "needs_review",
+      "note": "всегда ручной -- якоря не исключают FP"
+    },
+    "analytics_purchase": {
+      "category": "analytics_ad",
+      "severity": "medium",
+      "severity_note": "low для ad-networks/SKAdNetwork; critical ТОЛЬКО если payment_ui_classes.txt непуст для того же бинаря",
+      "verdict": "needs_review",
+      "note": "needs_review -> false_positive после 4.4b"
+    },
+    "crypto_web3": {
+      "category": "crypto_web3",
+      "severity": "critical",
+      "severity_alt": "high",
+      "severity_alt_when": "fiat on-ramp (MoonPay/Ramp/Transak/Banxa/Simplex) -> critical, остальное -> high",
+      "verdict": "needs_review"
+    },
+    "pos_ble_nfc": {
+      "category": "pos_ble_nfc",
+      "severity": "critical",
+      "severity_alt": "info",
+      "severity_alt_when": "SCP*-кластер -> critical; одиночный CBCentralManager -> info",
+      "verdict": "needs_review"
+    },
+    "feature_flags": {
+      "category": "feature_flag",
+      "severity": "info",
+      "severity_alt": "critical",
+      "severity_alt_when": "SDK-маркеры -> info; связка флаг->платёжный экран (Phase 7.6-7.8) -> critical",
+      "verdict": "needs_review"
+    },
+    "webview_url": {
+      "category": "webview_url",
+      "severity": "critical",
+      "severity_alt": "info",
+      "severity_alt_when": "checkout/bank/pay на стороннем домене -> critical; identity/login на своём -> info",
+      "verdict": "needs_review"
+    },
+    "plist_keys": {
+      "category": "plist",
+      "category_alt": "entitlement",
+      "severity": "critical",
+      "severity_alt": "info",
+      "severity_alt_when": "in-app-payments, Nordic-схемы -> critical; tenjin-skan.com -> info",
+      "verdict": "needs_review"
+    },
+    "localization_phrases": {
+      "category": "l10n",
+      "severity": "critical",
+      "severity_alt": "high",
+      "severity_alt_when": "bank login/card/реквизиты -> critical; liveness, donat* -> high",
+      "verdict": "needs_review"
+    },
+    "asset_names": {
+      "category": "asset",
+      "severity": "high",
+      "severity_alt": "medium",
+      "severity_alt_when": "orphaned -> high; referenced -> medium",
+      "verdict": "needs_review"
+    },
+    "secrets": {
+      "category": "secret",
+      "severity": "critical",
+      "verdict": "needs_review",
+      "note": "+ отдельный инцидент ротации (R13)"
+    },
+    "generic_payment_words": {
+      "category": "",
+      "severity": "info",
+      "verdict": "needs_review",
+      "note": "только ручной контекст-ревью; category по контексту"
+    },
+    "entitlements": {
+      "category": "entitlement",
+      "severity": "critical",
+      "severity_alt": "info",
+      "severity_alt_when": "payment entitlements (in-app-payments, pass-type-ids, nfc readersession, external-accessory) -> critical; applinks/webcredentials -> high/info by context",
+      "verdict": "needs_review",
+      "note": "row absent from PLAN.md:1224-1239 (13 rows for 14 packs) -- plan gap, documented"
+    }
+  },
+  "remediation_templates": {
+    "_source": "PLAN.md:1106-1195 (Remediation Guidance): Option A = remove ALL layers; Option A1 Nordic app-switch, A2 deprecated SDK, A3 analytics purchase-tracking; Option B = declare + remove ALL gating. Rendered by generate_report.py §7. Тексты option_a/option_b переведены на русский (язык отчётов).",
+    "_default": {
+      "option_a": "Полностью удалить функциональность слой за слоем (таблица Option A в PLAN.md): зависимость (Podfile/SPM/Cartfile + diff lockfile), флаги линковки (-ObjC/-all_load/-force_load), собственные обёртки-классы/storyboards, ключи и схемы в plist, entitlements/возможности, associated domains + AASA на сервере, ассеты, локализации во ВСЕХ .lproj, флаги remote-config и гео-условия. Пересобрать, переэкспортировать, перезапустить фазы 1-9; кластер паттерна должен исчезнуть из strings/classdump.",
+      "option_b": "Задекларировать (Option B по PLAN.md) ТОЛЬКО если функциональность — реальная потребность продукта: явная и конкретная запись в App Description + Notes for Review с пошаговым путём и демо-аккаунтом; снять ВСЕ условия доступности (никаких region/date/test-account/server-гейтинга — ревьюер из США должен попасть на экран безусловно); правовой ревью по 3.1.1 — цифровые товары обязаны идти через IAP, декларация не излечивает 3.1.1."
+    },
+    "payment_sdk": {
+      "option_a": "Удалить SDK и каждый слой, который он затрагивает (таблица Option A в PLAN.md): pod/пакет + транзитивные зависимости, флаги -ObjC/-force_load, собственные платёжные UI-классы (*Payment*/*Checkout*/*CardForm*), LSApplicationQueriesSchemes/URL-схемы, платёжные entitlements, ATS-исключения для платёжных доменов, логотипы карт/банков в Assets, l10n-строки карт/банков во всех .lproj, серверные страницы чекаута на доменах, которые открывает приложение. Повторный аудит: классы SDK отсутствуют в strings/classdump/hits.",
+      "option_b": "Задекларировать ТОЛЬКО для физических товаров/услуг или других законных не-IAP-каналов: явные App Description + Notes for Review (демо-аккаунт + весь платёжный путь); полностью убрать region/flag/AB/date-гейтинг; правовой ревью по 3.1.1 — внешний карточный канал для цифрового контента это отдельное нарушение 3.1.1, которое НЕЛЬЗЯ закрыть декларацией."
+    },
+    "feature_flag": {
+      "option_a": "Удалить флаг и из кода, И из консоли remote-config (иначе сервер вернёт его включённым), убрать гео/IP-условия (проверки countryCode/storefront) и каждый сопутствующий UI-элемент, который он гейтит (строка Remote config в PLAN.md). Гейтинг платёжного экрана флагом — это и есть механизм сокрытия по 2.3.1(a) — достижимость не снижает серьёзность.",
+      "option_b": "Не декларируется: флаг, скрывающий незадокументированную платёжную поверхность, нельзя привести в соответствие документацией. Либо удалить гейтнутую функциональность (Вариант A), либо сделать её безусловно доступной каждому пользователю И задекларировать (см. условия Варианта B для payment_sdk)."
+    },
+    "webview_url": {
+      "option_a": "Удалить эндпоинты/формы из приложения и на стороне сервера (Apple может инспектировать платёжные формы на сервере через associated domains); убрать ATS-исключения insecure-HTTP для этих доменов; удалить домены из applinks/webcredentials и почистить AASA-файлы.",
+      "option_b": "Задекларировать ТОЛЬКО если веб-поток — законная потребность продукта: описать его явно, сделать безусловно достижимым (без гео/флаг-условий), отдавать по HTTPS (платёжные формы в открытом виде — отсев по PCI/PAN), дать инструкции доступа для ревьюера."
+    },
+    "entitlement": {
+      "option_a": "Удалить capability/entitlement в Xcode И на App ID (в дев-портале); при get-task-allow=true — переподписать дистрибуционным профилем App Store (get-task-allow обязан быть false) и перепроверить дамп entitlements новой сборки.",
+      "option_b": "Задокументировать в Notes for Review, почему entitlement нужен продукту (например, список протоколов external-accessory) — но происхождение из dev-профиля (get-task-allow) никогда не декларируется: нужна сборка, подписанная дистрибуционным профилем."
+    },
+    "analytics_ad": {
+      "option_a": "Вариант A3 (PLAN.md §4.17) — НЕ удалять вслепую. Предпочтительно: 1) задокументировать SDK и сбор purchase-событий в App Description / Notes for Review (закрывает 2.5.1 + 2.3.1(a) недокументированная функциональность); 2) если purchase-атрибуция не нужна — отключить вызовы purchase-событий (logEvent/setRevenue/af_purchase...) и убедиться, что строки событий исчезли из analytics_purchase_hits.txt после пересборки; 3) только при повторной эскалации от Apple — полностью удалить SDK (полный Вариант A) и заменить решением без purchase-трекинга.",
+      "option_b": "Задекларировать аналитические SDK и их purchase-атрибуцию в App Description/Notes for Review (самое дешёвое исправление; отключение не требуется). Если платёжные UI-классы найдены в том же бинарнике (эскалация 4.4b) — это уже не аналитика: применить полные варианты payment_sdk."
+    },
+    "provenance": {
+      "option_a": "Переподписать distribution-профилем из App Store Connect. Проверить entitlements на соответствие заявленному функционалу.",
+      "option_b": "Не применимо — provenance-находка не требует декларации в App Description."
+    }
+  }
+}

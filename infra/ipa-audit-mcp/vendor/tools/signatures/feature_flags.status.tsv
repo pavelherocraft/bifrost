@@ -1,0 +1,10 @@
+FirebaseRemoteConfig|FIRRemoteConfig|fetchAndActivateWithCompletionHandler|configValueForKey|firebaseremoteconfig\.googleapis\.com	confirmed
+LDClient|LDConfig|LDContext|mobileKey|boolVariation|stringVariation|allFlags|LaunchDarkly	confirmed
+StatsigClient|statsig|getExperiment|getGate	confirmed
+UnleashClient|SplitFactory|OptimizelyUserContext|OptimizelyClient|OptimizelySwiftSDK|ConfigCatClient	confirmed
+FirebaseDynamicLinks|FDLDynamicLink|page\.link	confirmed
+setUserProperty|QonversionExperiments	confirmed
+enable_payment|show_checkout|card_payments_enabled|show_deposit|paywall_enabled|ru_checkout|region_gate|payments_enabled|premium_unlock|buy_premium|enable_pay	confirmed
+(launch|release|active|live|enable|feature|availability)[_a-z]*(date|after|from)|available_?after|go_?live|launchDate|releaseDate|featureStartDate|activeFrom	confirmed
+isTest(ing)?Account|test_?account|internalUser|internal_user|betaTester|tester(email|Id)s?|allowlist|whitelist|isReviewAccount|appleReviewer|demo_?account|staffOnly	confirmed
+experiment|variant|ab_?test|abtest|control_?group|treatment|\bbucket\b	confirmed

@@ -1,0 +1,19 @@
+api\.stripe\.com|Stripe-Version|X-Stripe-User-Agent|STPAPIClient|STPPaymentHandler|STPPaymentCardTextField|STPCardValidator|PaymentSheet|StripePaymentSheet|StripePaymentsUI|StripeApplePay|Stripe3DS2|StripeCardScan|StripeConnect|StripeFinancialConnections|FinancialConnectionsSheet
+BTAPIClient|BTDropInController|BTCardClient|BTThreeDSecure|BraintreeCore|BraintreeDropIn|sdk\.ios\.braintree|com\.venmo\.touch\.v2|paypal-app-switch-checkout|braintreegateway\.com
+AdyenSession|DropInComponent|CardComponent|checkoutshopper|adyen\.com
+SQPaymentRequest|SQPaymentSDK|SquareMobilePaymentsSDK|SquareInAppPaymentsSDK|SquareBuyerVerificationSDK|connect\.squareup\.com
+PKPaymentAuthorizationViewController|PKPaymentAuthorizationController|PKPaymentRequest|PKPaymentButton|canMakePaymentsUsingNetworks|PKPass\b|PassKit
+YooKassaPayments|YKSdk|TokenizationAssembly|TokenizationModuleInputData|BankCardRepeatModuleInputData|yookassa\.ru|yoomoneyauth|sberpay
+AcquiringSdk|TinkoffASDK|securepay\.tinkoff\.ru
+SberPay|SberID|securepayments\.sberbank\.ru
+CloudPayments|CloudpaymentsApi|CloudpaymentsNetworking|ThreeDsProcessor|ThreeDsData|ThreeDsDelegate|PaymentConfiguration|PaymentCardScanner|\bPaymentForm\b|\bPaymentData\b|CPRequest|CPToken|CPThreedsManager|CPScannerViewController|api\.cloudpayments\.ru
+Frames\.framework|Checkout\.framework|CheckoutEventLoggerKit|CheckoutFrames|CheckoutAPIClient|PaymentFormFactory|api\.checkout\.com|cko-|pk_sbox_   # lead: pods ✅, классы/хосты/ключи ⚠️
+Adapty|AdaptyUI|AdaptyLogger|AdaptyUIBuilder|AdaptyPlugin|AdaptyDelegate|AdaptyPaywall|AdaptyActor|io\.adapty\.sdk|api\.adapty\.io|api-eu\.adapty\.io|api-cn\.adapty\.io
+Qonversion|QNProduct|QNPermission|QN[A-Z][A-Za-z]+|api\.qonversion\.io   # lead: pod ✅, классы/хост ⚠️
+pay\.alfabank\.ru|alfabank   # lead: публичного iOS SDK НЕТ (§4.4 ❌) — детект только по хосту/ассетам
+PayPalCheckout|PayPalMobileSDK|PPCheckoutButton|PPConfig|api\.paypal\.com|paypalobjects\.com
+RazorpayCheckout|api\.razorpay\.com|robokassa\.ru|unitpay\.ru|mollie\.com
+RevenueCat|api\.revenuecat\.com|RCBackendQueue|redeem_purchase
+GWPPaymentProcessor|pay\.google\.com
+xsolla|paymentwall|qiwi\.com|2checkout|authorize\.net
+SKPaymentQueue|SKProductsRequest|restoreCompletedTransactions|verifyReceipt|Transaction\.updates|Product\.products

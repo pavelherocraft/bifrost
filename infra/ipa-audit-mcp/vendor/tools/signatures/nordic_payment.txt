@@ -1,0 +1,5 @@
+bankid://|BankID|bankid\.no|app\.bankid\.com|autostarttoken   # lead: схема каноническая, Relying Party Guidelines не извлечены (JS-SPA)
+mitid|mitid-app|nemid   # lead: [UNVERIFIED] — сверить с mitid.dk; MitID заменил NemID в 2021
+swish://|getswish|SwishSDK|\bSwish\b   # lead; ГОЛОЕ swish НЕ использовать (англ. слово → sound-effect строки)
+vipps://|\bVipps\b|api\.vipps\.no|apitest\.vipps\.no|vippsmobilepay\.com|VippsLoginSDK   # lead: схемы/хосты ⚠️, модель интеграции ✅ по dev-порталу
+mobilepay://|MobilePaySDK|MobilePayPayment|mobilepay\.dk|\bMobilePay\b|MobilePay-AppSwitch   # lead; КРИТИЧНО: голый mobilepay ⊂ SquareMobilePaymentsSDK → дубль-хит по Square

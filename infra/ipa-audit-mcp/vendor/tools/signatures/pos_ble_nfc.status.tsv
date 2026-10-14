@@ -1,0 +1,7 @@
+StripeTerminal|SCPPaymentIntent|SCPBluetoothReaderDelegate|SCPCardPresentDetails|SCPDiscoveryConfiguration|com\.stripe-terminal|terminal/connection_token	confirmed
+SquareReaderSDK|SQRD	confirmed
+SumUpSDK|ZSDK_|Zettle|iZettle|com\.adyen|com\.ingenico|com\.verifone|com\.pax	confirmed
+StarIO|StarIO_Extension|ePOS2|epsonpos:|TSPL|ZPL_|ZSDK_API	confirmed
+SKTCapture|Captuvo|DataWedge	confirmed
+CBCentralManager|CBPeripheralManager|scanForPeripheralsWithServices|EAAccessoryManager|EASession	confirmed
+NFCNDEFReaderSession|NFCTagReaderSession|D2760000850101	confirmed

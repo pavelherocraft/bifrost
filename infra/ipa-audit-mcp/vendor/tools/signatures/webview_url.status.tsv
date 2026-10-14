@@ -1,0 +1,2 @@
+https?://[^"' ]*(checkout|billing|payment|pay/|stripe|paypal|subscribe|subscription|invoice|login|signin|sign-in|oauth|auth|token|callback|redirect|bank|kyc|verify|wallet|deposit|topup|top-up|purchase|cart|order|identity|challenge|donate)	confirmed
+bankid://|swish://|vipps://|mobilepay://|mitid-|wc:|metamask:|cbwallet:|sberpay|yoomoneyauth	confirmed

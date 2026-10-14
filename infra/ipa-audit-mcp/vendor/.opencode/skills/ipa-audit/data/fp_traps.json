@@ -1,0 +1,98 @@
+{
+  "_source": "PLAN.md:1086-1097 (Rev 2 mandatory FP traps) + PLAN.md:1082-1084 triage context",
+  "traps": [
+    {
+      "id": "mobilepay-square",
+      "trap": "mobilepay is a substring of SquareMobilePaymentsSDK",
+      "rule": "Bare `mobilepay` gives a guaranteed double hit on Square. Anchor required: \\bMobilePay\\b|mobilepay://|MobilePaySDK|mobilepay\\.dk. A hit that also appears in frameworks_payment_hits.txt as part of SquareMobilePaymentsSDK -> false_positive (duplicate); do not file twice.",
+      "refs": ["PLAN.md:1087", "PLAN.md:1240"]
+    },
+    {
+      "id": "tink-crypto-vs-banking",
+      "trap": "Tink (open banking) != Tink (Google crypto)",
+      "rule": "Open-banking Tink = pod TinkLink (TinkLink.xcframework, Tink.openUrl, link.tink.com). A bare Tink/TinkKit/com.google.crypto.tink hit WITHOUT the TinkLink cluster -> false_positive (Google crypto library, extremely common transitive dep). Context check mandatory.",
+      "refs": ["PLAN.md:1088"]
+    },
+    {
+      "id": "sepa-separate",
+      "trap": "sepa is a substring of separate/separator/separated",
+      "rule": "Only sepa\\b|sepa[- ]?transfer. Hits on separate/separator/separated -> false_positive.",
+      "refs": ["PLAN.md:1089"]
+    },
+    {
+      "id": "swish-english-word",
+      "trap": "swish is an ordinary English word",
+      "rule": "Sound-effect strings, animations. Only swish://|getswish|SwishSDK|\\bSwish\\b IN a payment context (+-20 lines: pay/checkout/bank/amount/SEK). Otherwise false_positive.",
+      "refs": ["PLAN.md:1090"]
+    },
+    {
+      "id": "frames-generic",
+      "trap": "Frames (Checkout.com) is a generic word",
+      "rule": "Only Frames\\.framework|Checkout\\.framework|CheckoutEventLoggerKit|CheckoutAPIClient|api\\.checkout\\.com|cko-. Hits on CGRect/frames:/UI animations -> false_positive.",
+      "refs": ["PLAN.md:1091"]
+    },
+    {
+      "id": "zoom-facetec",
+      "trap": "zoOm/zoom (FaceTec) -- bare zoom catches Zoom SDK and pinch animations",
+      "rule": "Only FaceTec|FaceTecSDK|ZoomAuthentication.",
+      "refs": ["PLAN.md:1092"]
+    },
+    {
+      "id": "truesdk-truecaller",
+      "trap": "TrueSDK = Truecaller, NOT TrueLayer",
+      "rule": "TrueLayer = TrueLayerPaymentsSDK.",
+      "refs": ["PLAN.md:1093"]
+    },
+    {
+      "id": "identity-generic",
+      "trap": "identity (webview_url/localization) -- Microsoft identity platform / Sign in with Apple",
+      "rule": "-> needs_review, not violation.",
+      "refs": ["PLAN.md:1094"]
+    },
+    {
+      "id": "iproov-vendored-deps",
+      "trap": "Vendored deps of iProov (Starscream, GPUImage2, SwiftProtobuf, TrustKit)",
+      "rule": "General-purpose WebSocket/crypto libraries do NOT prove iProov -> false_positive without the IProov cluster.",
+      "refs": ["PLAN.md:1095"]
+    },
+    {
+      "id": "ad-network-fp-source",
+      "trap": "Ad networks (AdMob GAD*, AppLovin AL*, ironSource/LevelPlay IS*, FAN FBAd*) are the FP source for StoreKit/WebView strings",
+      "rule": "SKStoreProductViewController, itunes strings inside ad SDKs are not violations.",
+      "refs": ["PLAN.md:1096"]
+    },
+    {
+      "id": "generic-analytics-names",
+      "trap": "logEvent/\\bAdjust\\b/ALSdk/IS* are short or generic names",
+      "rule": "Accept only together with a vendor-specific marker (af_purchase/AFEventPurchase, ADJEvent/app.adjust.com, AppLovinSDK, IronSourceSDK).",
+      "refs": ["PLAN.md:1097"]
+    },
+    {
+      "id": "analytics-vs-processing",
+      "trap": "Analytics purchase tracking vs payment processing (R17)",
+      "rule": "Tracks purchases = logEvent/transaction:andReceipt:/setRevenue/sk_purchase/BranchEvent.PURCHASE near attribution hosts (onelink.me, app.adjust.com, api2.branch.io, sdk-api-v1.singular.net, tenjin-skan.com), WITHOUT own payment UI classes and WITHOUT card/3DS crypto -> analytics (medium/low, record it). Processes payments = PaymentForm/*CardForm*/*Tokeniz*/ThreeDsProcessor/STPCardValidator + provider host -> payment SDK (CRITICAL). Practical check: Phase 4.4b payment_ui_classes.txt.",
+      "refs": ["PLAN.md:1083"]
+    },
+    {
+      "id": "mitid-commitid",
+      "trap": "mitid inside commitID/_commitID (observed in the reference audit)",
+      "rule": "Bare `mitid` pattern without word boundary matches commitID -> false_positive unless an anchored Nordic cluster is present.",
+      "refs": ["reference audit false_positives", "PLAN.md:1102"]
+    },
+    {
+      "id": "qn-system-xml",
+      "trap": "QN[A-Z][A-Za-z]+ matches the System.Xml Qn* BCL family in Mono/.NET runtimes",
+      "rule": "QnXmlNs/QnName/QnDtDt etc. inside Mono BCL -> not Qonversion -> false_positive.",
+      "refs": ["reference audit false_positives"]
+    }
+  ],
+  "escalation_triggers": [
+    "nordic_payment hits (all -- anchors reduce but do not exclude FP)",
+    "date/test-account/AB gating hits (manual context +-20 lines)",
+    "appex findings",
+    "associated-domains anything",
+    "signature pack lines with # lead status",
+    "Tinkoff/Sberbank/CloudPayments legacy CP*/PayPal/Jumio/Veriff/FaceTec/AU10TIX/MitID-NemID/BankID schemes/Yodlee/Finicity/MX/Yapily/Checkout.com classes/Qonversion/pay.alfabank.ru"
+  ],
+  "suppression_scope_rule": "analytics_purchase patterns may be suppressed ONLY per binary+SDK (e.g. AppsFlyerLib.framework:af_purchase), never globally: the same af_purchase in the main binary near payment classes is a violation (PLAN.md:1100)."
+}

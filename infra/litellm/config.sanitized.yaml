@@ -720,6 +720,13 @@ mcp_servers:
     allow_all_keys: true
     extra_headers: ["authorization", "x-litellm-api-key"]
     description: "Johnny the Knight MCP — media generation: images, video (MiniMax), TTS, voice clone, ASR"
+  ipa_audit:
+    alias: IPA Audit MCP
+    url: http://172.18.0.1:9102/mcp
+    transport: http
+    allow_all_keys: true
+    extra_headers: ["authorization", "x-litellm-api-key"]
+    description: "IPA Audit MCP — App Store 2.3.1(a) IPA audit pipeline: extract, plist/frameworks/strings/assets/flags analysis, signature-pack greps, triage → findings → report, V1-V10 review"
 
   zai_web_search:
     url: https://api.z.ai/api/mcp/web_search_prime/mcp

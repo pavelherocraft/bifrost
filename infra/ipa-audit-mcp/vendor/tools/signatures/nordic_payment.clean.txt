@@ -1,0 +1,5 @@
+bankid://|BankID|bankid\.no|app\.bankid\.com|autostarttoken
+mitid|mitid-app|nemid
+swish://|getswish|SwishSDK|\bSwish\b
+vipps://|\bVipps\b|api\.vipps\.no|apitest\.vipps\.no|vippsmobilepay\.com|VippsLoginSDK
+mobilepay://|MobilePaySDK|MobilePayPayment|mobilepay\.dk|\bMobilePay\b|MobilePay-AppSwitch
