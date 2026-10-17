@@ -4,6 +4,25 @@
 
 ---
 
+### [2026-10-17] — Omni: списания в SpendLogs + карточка в /limits
+
+- **`POST /admin/media-spend`** — новый роутер в контейнере LiteLLM
+  (`admin/media_spend_route.py`, регистрация патчем `_MEDIA_SPEND_ROUTER_PATCH_`
+  в `litellm_entrypoint.sh`). Bearer VK хэшируется и ищется в
+  `LiteLLM_VerificationToken` → строка в `LiteLLM_SpendLogs` с
+  `call_type=media_generation`, spend, токенами и user/team ключа.
+  Медиа-генерация (обходит токенный биллинг) теперь видна в spend-отчётах.
+- **media-mcp**: `video_status` по omni-задачам считает стоимость из
+  `usage` Interactions API (вход $1.50/1M, текст+мысли $9/1M, видео
+  $17.50/1M ≈ $0.10/сек @720p), возвращает `cost_usd`/`tokens` и
+  best-effort пишет списание через `/admin/media-spend`.
+- **`/limits`**: провайдер `omni` («Gemini Omni (видео, PAYG)») — видео и
+  списания за 24ч/7д/30д из SpendLogs + строка тарифов. Карточка видна
+  владельцам gemini image-моделей. Проверено e2e: $0.34 за 3.5с@360p,
+  строка `media_generation` в SpendLogs.
+
+---
+
 ### [2026-10-17] — media-mcp: Gemini Omni 1.1 Flash (Interactions API)
 
 В `generate_video` добавлена модель `gemini/omni-1.1-flash` через Google

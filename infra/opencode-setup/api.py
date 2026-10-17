@@ -1285,6 +1285,45 @@ def _gigachat_windows(p):
              "extra": bars[1:]}]
 
 
+def _omni_windows(p):
+    """Gemini Omni video — PAYG per output token, no upstream quota API.
+    Shows our own recorded media spend from LiteLLM_SpendLogs (written by
+    media-mcp via /admin/media-spend on each completed interaction)."""
+    import psycopg2
+    conn = psycopg2.connect(_db_dsn(), connect_timeout=8)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            'SELECT '
+            'count(*) FILTER (WHERE "startTime" > now() - interval \'24 hours\'),'
+            'coalesce(sum(spend) FILTER (WHERE "startTime" > now() - interval \'24 hours\'),0),'
+            'count(*) FILTER (WHERE "startTime" > now() - interval \'7 days\'),'
+            'coalesce(sum(spend) FILTER (WHERE "startTime" > now() - interval \'7 days\'),0),'
+            'count(*), coalesce(sum(spend),0) '
+            'FROM "LiteLLM_SpendLogs" '
+            'WHERE "startTime" > now() - interval \'30 days\' '
+            "AND model_group='gemini/omni-1.1-flash'")
+        n24, s24, n7, s7, n30, s30 = cur.fetchone()
+    finally:
+        conn.close()
+
+    def row(title, used, unit):
+        return {"title": title, "usage_count": used, "unit": unit,
+                "remaining_percent": None}
+
+    return [{
+        "name": "media spend",
+        "interval": row("Видео за 24ч", n24, "шт"),
+        "weekly": row("Списано за 7 дней", round(s7, 2), "$"),
+        "extra": [
+            row("Списано за 24ч", round(s24, 2), "$"),
+            row("Видео за 30 дней", n30, "шт"),
+            row("Списано за 30 дней", round(s30, 2), "$"),
+            {"title": "Тариф: ~$0.10/сек @720p · вход $1.50 · видео $17.50 /1M ток",
+             "remaining_percent": None},
+        ]}]
+
+
 def _iso_to_ms(s):
     """'2026-10-15T22:57:49.500651Z' -> epoch ms (naive-safe)."""
     if not s:
@@ -1686,6 +1725,18 @@ _LIMIT_PROVIDERS = {
         "label": "OpenRouter",
         "models": {"openrouter/deepseek-v4.1-flash"},
         "local": _openrouter_windows,
+    },
+    "omni": {
+        # Gemini Omni video via Interactions API (media-mcp). No upstream
+        # quota — spend is written to LiteLLM_SpendLogs by media-mcp.
+        # Card is gated on the gemini image models since omni itself is
+        # only reachable through the media MCP, not as a chat deployment.
+        "label": "Gemini Omni (видео, PAYG)",
+        "models": {
+            "gemini/gemini-3.1-flash-image", "gemini/gemini-3-pro-image",
+            "gemini/omni-1.1-flash",
+        },
+        "local": _omni_windows,
     },
 }
 

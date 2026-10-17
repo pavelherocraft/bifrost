@@ -265,6 +265,52 @@ except Exception as _e:
     print(f"[entrypoint] payload_logs_router WARN: {_e}", flush=True)
 PYEOF6
 
+# Media spend router: POST /admin/media-spend writes media-generation
+# spend into LiteLLM_SpendLogs (VK-authenticated). Idempotent — adds
+# include_router() after the payload_logs_router patch block.
+echo "[entrypoint] ensuring media_spend_router is registered..."
+/app/.venv/bin/python3 - <<'PYEOF6b'
+import os, sys
+sys.path.insert(0, "/app")
+try:
+    target = "/app/.venv/lib/python3.13/site-packages/litellm/proxy/proxy_server.py"
+    with open(target) as f:
+        src = f.read()
+    if "_MEDIA_SPEND_ROUTER_PATCH_" in src:
+        print("[entrypoint] proxy_server.py already patched for media_spend_router", flush=True)
+    else:
+        needle = "    print(f\"[entrypoint] payload_logs_router WARN: {_e}\")" + chr(10)
+        if needle not in src:
+            print("[entrypoint] WARN: payload_logs_router include line not found in proxy_server.py", flush=True)
+        else:
+            nl = chr(10)
+            inject = (
+                nl +
+                "# _MEDIA_SPEND_ROUTER_PATCH_: register /admin/media-spend" + nl +
+                "try:" + nl +
+                "    from admin.media_spend_route import router as _media_spend_router" + nl +
+                "    app.include_router(_media_spend_router)" + nl +
+                "    print(\"[entrypoint] media_spend_router REGISTERED\")" + nl +
+                "except Exception as _e:" + nl +
+                "    import traceback" + nl +
+                "    traceback.print_exc()" + nl +
+                "    print(f\"[entrypoint] media_spend_router WARN: {_e}\")" + nl
+            )
+            new_src = src.replace(needle, inject, 1)
+            with open(target, "w") as f:
+                f.write(new_src)
+            for d in ["/app/.venv/lib/python3.13/site-packages/litellm/proxy/__pycache__"]:
+                if os.path.isdir(d):
+                    for fn in os.listdir(d):
+                        if "proxy_server" in fn and fn.endswith(".pyc"):
+                            os.remove(os.path.join(d, fn))
+            print("[entrypoint] proxy_server.py patched for media_spend_router", flush=True)
+except Exception as _e:
+    import traceback
+    traceback.print_exc()
+    print(f"[entrypoint] media_spend_router WARN: {_e}", flush=True)
+PYEOF6b
+
 
 # _PATCH_XIAOMI_AUDIO_: normalize message.audio (expires_at/transcript) for
 # Xiaomi MiMo TTS chat.completions responses. Idempotent; script in admin/ dir.

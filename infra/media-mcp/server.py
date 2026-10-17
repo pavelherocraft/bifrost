@@ -85,6 +85,10 @@ VIDEO_MODELS = {
 OMNI_MODELS = {"gemini/omni-1.1-flash": "gemini-omni-1.1-flash"}
 _OMNI_RESOLUTIONS = {"360p": "360p", "720p": "720p", "768p": "720p",
                      "1080p": "1080p", "2k": "4k", "4k": "4k"}
+# $/token — ai.google.dev pricing (paid tier, Oct 2026)
+_OMNI_PRICE_IN = 1.5e-6        # input, any modality
+_OMNI_PRICE_TEXT_OUT = 9e-6    # text + thinking output
+_OMNI_PRICE_VIDEO_OUT = 17.5e-6  # video output (~5,792 tok/s @720p ≈ $0.10/s)
 VIDEO_V2_MODELS = {"MiniMax-H3", "MiniMax-H3-Max"}
 VOICE_CLONE_MODELS = {
     "voice/xiaomi/mimo-v2.5-tts-voiceclone": "zero-shot clone: sample passed inline with each request (clone_speech)",
@@ -382,7 +386,45 @@ async def _omni_video(model, prompt, resolution, ratio,
             "note": "omni task — poll video_status(task_id)"}
 
 
-async def _omni_status(task_id: str) -> dict:
+def _omni_cost(usage: dict) -> tuple:
+    """Interactions usage -> (prompt_tokens, completion_tokens, usd)."""
+    if not usage:
+        return 0, 0, 0.0
+    ptok = usage.get("total_input_tokens") or 0
+    vtok = ttok = 0
+    for o in usage.get("output_tokens_by_modality") or []:
+        if o.get("modality") == "video":
+            vtok += o.get("tokens") or 0
+        else:
+            ttok += o.get("tokens") or 0
+    thought = usage.get("total_thought_tokens") or 0
+    spend = (ptok * _OMNI_PRICE_IN
+             + vtok * _OMNI_PRICE_VIDEO_OUT
+             + (ttok + thought) * _OMNI_PRICE_TEXT_OUT)
+    return ptok, vtok + ttok + thought, spend
+
+
+async def _omni_log_spend(vk: str, task_id: str, usage: dict) -> None:
+    """Record Omni usage in LiteLLM_SpendLogs (best-effort, never fails)."""
+    ptok, ctok, spend = _omni_cost(usage)
+    if not spend:
+        return
+    try:
+        await _llm(vk, "POST", "/admin/media-spend", timeout=20, json={
+            "model": "gemini/omni-1.1-flash",
+            "task_id": task_id,
+            "prompt_tokens": ptok,
+            "completion_tokens": ctok,
+            "total_tokens": ptok + ctok,
+            "spend": round(spend, 6),
+            "custom_llm_provider": "gemini-interactions",
+            "usage": usage,
+        })
+    except Exception:
+        pass
+
+
+async def _omni_status(task_id: str, vk: str = "") -> dict:
     """Poll a gemini/omni Interactions API job; on completion re-host video."""
     async with httpx.AsyncClient(timeout=60) as c:
         r = await c.get(f"{GEMINI_API}/interactions/{task_id}",
@@ -402,6 +444,12 @@ async def _omni_status(task_id: str) -> dict:
                     out["url"] = _save(vid, ".mp4")
                     out["bytes"] = len(vid)
                     _task_cache_put(task_id, out["url"], out["bytes"])
+                    ptok, ctok, spend = _omni_cost(d.get("usage"))
+                    if spend:
+                        out["cost_usd"] = round(spend, 4)
+                        out["tokens"] = {"input": ptok, "output": ctok}
+                    if vk:
+                        await _omni_log_spend(vk, task_id, d.get("usage"))
                     return out
         out["note"] = "completed but no video content in steps"
     elif status == "failed":
@@ -657,7 +705,7 @@ async def video_status(
     if cached:
         return {"task_id": task_id, "status": "Success", **cached}
     if str(task_id).startswith("v1_"):
-        return await _omni_status(task_id)
+        return await _omni_status(task_id, vk)
     d = None
     for ver in ("v2", "v1"):
         try:
