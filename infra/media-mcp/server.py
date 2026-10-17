@@ -24,11 +24,11 @@ import re
 import sqlite3
 import uuid
 from datetime import datetime, timezone
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 import httpx
 from mcp.server.fastmcp import Context, FastMCP
-from pydantic import Field
+from pydantic import Field, create_model
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -125,6 +125,48 @@ def _check_rate(vk: str, category: str) -> int:
             f"Daily {category} generation limit reached ({limit}/day per key, "
             "resets 00:00 UTC).")
     return limit - n
+
+
+async def _resolve_model(ctx: Context, requested: str,
+                         catalog: dict, kind: str) -> Optional[str]:
+    """Validate/choose a generation model.
+
+    - requested non-empty -> validate against catalog, return it.
+    - empty -> ask the user: try MCP elicitation (native pick dialog in
+      clients that support it); if the client can't elicit or the user
+      cancels, return None so the tool can reply with a compact choice
+      list the agent relays to the user.
+    """
+    if requested:
+        if requested not in catalog:
+            raise ValueError(
+                f"unknown {kind} model '{requested}'. Options: "
+                + "; ".join(catalog))
+        return requested
+    try:
+        Pick = create_model(
+            "MediaModelChoice",
+            model=(Literal[tuple(catalog)], ...))
+        res = await ctx.elicit(
+            f"Choose a {kind} model "
+            f"({'; '.join(f'{k} — {v}' for k, v in catalog.items())})",
+            schema=Pick)
+        data = getattr(res, "data", None)
+        pick = getattr(data, "model", None) or (data or {}).get("model")
+        if getattr(res, "action", "") == "accept" and pick in catalog:
+            return pick
+    except Exception:
+        pass
+    return None
+
+
+def _choice_payload(kind: str, catalog: dict) -> dict:
+    """Ask-path fallback for clients without MCP elicitation."""
+    return {"status": "model_choice_required",
+            "kind": kind,
+            "options": catalog,
+            "message": ("Ask the user which model to use, then call this "
+                        "tool again with model=<id> from options.")}
 
 
 async def _llm(vk: str, method: str, path: str, timeout: float = 120, **kw):
@@ -313,6 +355,7 @@ def list_media_models() -> dict:
             "two clone modes: xiaomi zero-shot (clone_speech, per-request) vs minimax persistent voice_id (register_voice_clone once -> reuse in synthesize_speech)",
             "MiniMax-H3 video also supports last_frame_url and reference media (see tool params); H3/H3-Max and voice_clone bill to the MiniMax PAYG account",
             "voicedesign: voice comes purely from `style` description; voice param not supported",
+            "leave `model` empty in generate_*/edit_*/synthesize_* to show the user a model picker (or get a choice list back)",
         ],
     }
 
@@ -321,12 +364,15 @@ def list_media_models() -> dict:
 async def generate_image(
     ctx: Context,
     prompt: Annotated[str, Field(description="Text description of the image to generate")],
-    model: Annotated[str, Field(description="Image model id — see list_media_models().image_models")] = "gemini/gemini-3.1-flash-image",
+    model: Annotated[str, Field(description="Image model id — see list_media_models().image_models. Leave EMPTY to let the user pick")] = "",
     size: Annotated[Optional[str], Field(description="Optional: 'WxH' (e.g. 1024x1024) for openai models, aspect ratio like '16:9' for minimax/image-01")] = None,
 ) -> dict:
     """Generate an image from text. Returns {url} — a hosted public URL (TTL 24h).
     The URL can be passed to generate_video.first_frame_url for image-to-video."""
     vk = _vk(ctx)
+    model = await _resolve_model(ctx, model, IMAGE_MODELS, "image")
+    if model is None:
+        return _choice_payload("image", IMAGE_MODELS)
     _check_rate(vk, "image")
     if model == "minimax/image-01":
         body = {"model": "image-01", "prompt": prompt}
@@ -365,13 +411,16 @@ async def edit_image(
     ctx: Context,
     prompt: Annotated[str, Field(description="What to change in the image (e.g. 'replace background with sunset', 'make it watercolor style')")],
     image: Annotated[str, Field(description="Source image: http(s) URL (e.g. from generate_image) | data-URI | 'upload:<name>' | base64. png/jpg/webp")],
-    model: Annotated[str, Field(description="Edit-capable model — see list_media_models().image_edit_models")] = "gemini/gemini-3.1-flash-image",
+    model: Annotated[str, Field(description="Edit-capable model — see list_media_models().image_edit_models. Leave EMPTY to let the user pick")] = "",
     size: Annotated[Optional[str], Field(description="Optional output size 'WxH' for openai models")] = None,
 ) -> dict:
     """Edit an existing image (image-to-image / inpainting by instruction).
     Returns {url} — hosted public URL (TTL 24h); usable as
     generate_video.first_frame_url."""
     vk = _vk(ctx)
+    model = await _resolve_model(ctx, model, IMAGE_EDIT_MODELS, "image-edit")
+    if model is None:
+        return _choice_payload("image-edit", IMAGE_EDIT_MODELS)
     _check_rate(vk, "image")
     async with httpx.AsyncClient(timeout=120) as c:
         raw = await _resolve_source(image, c)
@@ -421,7 +470,7 @@ async def edit_image(
 async def generate_video(
     ctx: Context,
     prompt: Annotated[str, Field(description="Scene description: subject, motion, camera")],
-    model: Annotated[str, Field(description="Video model — see list_media_models().video_models. MiniMax-H3 = newest v2 (up to 2K, first+last frame, reference_media inputs); Hailuo-2.3/02, T2V-01 = v1")] = "MiniMax-H3",
+    model: Annotated[str, Field(description="Video model — see list_media_models().video_models. MiniMax-H3 = newest v2 (up to 2K, first+last frame, reference_media inputs); Hailuo-2.3/02, T2V-01 = v1. Leave EMPTY to let the user pick")] = "",
     duration_s: Annotated[Optional[int], Field(description="Clip length in seconds (H3: 5-10; v1: 5-10); omit for provider default")] = None,
     resolution: Annotated[str, Field(description="768P (default) | 1080P | 2K (H3 only)")] = "768P",
     ratio: Annotated[Optional[str], Field(description="Aspect ratio 16:9|4:3|1:1|3:4|9:16|21:9 — REQUIRED for H3 text-to-video; 'adaptive' allowed when a frame image is given")] = None,
@@ -433,6 +482,9 @@ async def generate_video(
     generation takes minutes; poll video_status(task_id) until status=Success.
     H3 models use the v2 multimodal API; others use v1."""
     vk = _vk(ctx)
+    model = await _resolve_model(ctx, model, VIDEO_MODELS, "video")
+    if model is None:
+        return _choice_payload("video", VIDEO_MODELS)
     _check_rate(vk, "video")
     if reference_media:
         if model not in VIDEO_V2_MODELS:
@@ -556,7 +608,7 @@ async def video_status(
 async def synthesize_speech(
     ctx: Context,
     text: Annotated[str, Field(description="Text to speak. Audio tags like (laughs),(sighs),(唱歌) for singing are allowed inside")],
-    model: Annotated[str, Field(description="TTS model — see list_media_models().tts_models")] = "voice/xiaomi/mimo-v2.5-tts",
+    model: Annotated[str, Field(description="TTS model — see list_media_models().tts_models. Leave EMPTY to let the user pick")] = "",
     voice: Annotated[Optional[str], Field(description="Voice id: mimo presets (mimo_default, Mia, Chloe, Milo, Dean, 冰糖, 茉莉, 苏打, 白桦), minimax system voices (female-shaonv, presenter_male, ...) or a cloned voice_id from register_voice_clone")] = None,
     style: Annotated[Optional[str], Field(description="Natural-language style instruction: emotion, pace, accent. REQUIRED for voicedesign model")] = None,
     format: Annotated[str, Field(description="Output audio format: wav | mp3")] = "wav",
@@ -565,6 +617,9 @@ async def synthesize_speech(
     Voice selection: mimo preset voices (xiaomi) or minimax system voices —
     full lists in list_media_models()."""
     vk = _vk(ctx)
+    model = await _resolve_model(ctx, model, TTS_MODELS, "tts")
+    if model is None:
+        return _choice_payload("tts", TTS_MODELS)
     if model.startswith("minimax/"):
         vid = voice or "female-shaonv"
         # cloned voice_ids live in the PAYG account; system voices go

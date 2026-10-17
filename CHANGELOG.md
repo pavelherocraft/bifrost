@@ -4,6 +4,68 @@
 
 ---
 
+### [2026-10-17] — media-mcp: выбор модели у пользователя (elicit + ask-фолбэк)
+
+`generate_image`, `edit_image`, `generate_video`, `synthesize_speech`:
+дефолт `model` заменён на пустую строку. Если модель не указана —
+`_resolve_model` сначала пробует MCP elicitation (`ctx.elicit`, нативный
+диалог выбора у клиентов с capability), а при отсутствии поддержки/отказе
+возвращает `{"status": "model_choice_required", "options": {...}}` —
+агент спрашивает юзера и перезвывает с `model=<id>`. Резолв идёт до
+`_check_rate`, вопрос не тратит дневную квоту. Неверное имя модели теперь
+валидируется с перечнем вариантов.
+
+---
+
+### [2026-10-15] — Лимиты: пайплайн логотипов планов (старт)
+
+Старт воспроизводимого пайплайна пиксель-арт логотипов для 13 токенных
+планов страницы `hcbifrost.herocraft.com/setup-opencode/limits.html`.
+Каждый логотип генерируется по двум референсам: house-style
+`Отчеты ХК\Picts\Logo_pixel_HD.png` (16-bit pixel art, сетка 7x7px, без
+антиалиасинга) + лого компании из локальных ассетов. Шаг P0-1 (аудит
+источников + маппинг) завершён, P0-2…P1-8 — впереди.
+
+- **P0-1 готов**: `…\Мир за пределами клодкода\logos\pixel\mapping.json` —
+  авторитетный маппинг 13 строк. Слаги = ключи `_LIMIT_PROVIDERS` в
+  `infra/opencode-setup/api.py` (~1538–1690) = `entry.id` из GET /limits:
+  minimax, zai, zaires, kimi, mimo, alicoding, alitoken, stepfun, tencent,
+  mistral, atlas, gigachat, openrouter. Выходы — `<slug>.png`,
+  публичный URL `/setup-opencode/logos/<slug>.png` (nginx alias
+  `^~ /setup-opencode` уже покрывает — изменений не требуется)
+- Контракт строки mapping.json: `output_file`, `source` (null только у
+  бейджей), `board_right_image` (никогда не null — правая половинка борды
+  P0-2), `paste_mode` (company-строки = измеренный bg_mode, бейджи =
+  opaque_white), `source_kind` (company_logo|badge), `shared_with`
+  (симметрично: zai↔zaires, alicoding↔alitoken), `api_py_line`,
+  `badge_spec` на 3 бейджевых строках (`prompt_source` +
+  `sketch_is_brand_reference: false`)
+- Три плана без лого в локальных ассетах (openrouter, tencent, atlas)
+  решены как **оригинальные пиксель-бейджи** — без подстановки чужих марок
+  (`openai.svg` для OpenRouter — миссибьюция; `forbidden_sources` включает
+  openai.svg/png, gigachat_og.png, zhipu.*, moonshot.*, флаги, alice, devin).
+  Скетчи в `pixel\sketches\` — референс композиции, пиксели не трейсить
+- `qa_diff_hints` в mapping.json: пары zai/zaires и alicoding/alitoken
+  пиксельно идентичны **намеренно** (наивная проверка «нет двух одинаковых
+  выводов» даёт false-positive); для бейджей перед любым диффом маскировать
+  внешнюю рамку + тайл — иначе реальный коллапс бейджа читается как ~0%
+- `pixel\audit.py` (PIL-only): hard-гейты — `OVERSIZED_BYTES | BLANK |
+  ASPECT_UNUSABLE`; `ASPECT_OUT_OF_RANGE` — информационный (широкие
+  вордмарки, напр. minimax 960x230 → letterbox в P0-2), не ошибка
+- Выходы генерации 1024x1024 → обязательный даунскейл **PIL `Image.NEAREST`
+  до 256x256** (другой ресемпл убивает пиксельную сетку)
+- Дальше по `dev_plan.md`: P0-2 борды `[Herocraft | company]` → P0-3
+  генерация (image-creator, gpt-image-2.5) → P0-4 NEAREST-постпроцесс →
+  P0-5 QA (view-image) → P1-6 загрузка в `/opt/opencode-setup/logos/` →
+  P1-7 редизайн limits.html (контракт GET /limits сохранить) → P1-8 деплой
+- Артефакты: рабочая папка `P:\Programming\Китайские_нейронки\Мир за
+  пределами клодкода\logos\pixel\` (audit.py, mapping.json,
+  probe_report.{json,md}, _sources_contact_sheet.png, sketches\) +
+  `dev_plan.md` в репо. Источники (`logos\png\`, `Picts\`) read-only;
+  записи — только в `pixel\` и dev_plan.md
+
+---
+
 ### [2026-10-14] — IPA Audit MCP: пайплайн аудита App Store 2.3.1(a) как MCP-сервер
 
 Новый сервис `ipa_audit` (FastMCP, :9102, за LiteLLM `mcp_servers`) — тонкая
