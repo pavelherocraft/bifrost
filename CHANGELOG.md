@@ -4,6 +4,23 @@
 
 ---
 
+### [2026-10-17] — media-mcp: Gemini Omni 1.1 Flash (Interactions API)
+
+В `generate_video` добавлена модель `gemini/omni-1.1-flash` через Google
+Interactions API (`POST /v1beta/interactions`, `background: true` →
+поллинг `GET /interactions/{id}`; `task_id` = `v1_...`, `video_status`
+роутит по префиксу). Видео 3–10с со звуком, разрешения
+360p/720p/1080p/4k (маппинг 768P→720p, 2K→4k), `aspect_ratio`
+сквозной. Поддержаны `first_frame_url`/`last_frame_url`
+(`video_config.task=image_to_video`), `reference_media` (только
+image/video блоки) и новый параметр `previous_interaction_id` —
+итеративное редактирование/расширение прошлого ролика без повторной
+загрузки. Ключ `GEMINI_API_KEY` читается из env media-mcp
+(тот же ключ, что в LiteLLM-деплоях gemini/*); VK-гейтинг и дневной
+видео-лимит применяются как обычно. Тест e2e: task→status→hosted mp4.
+
+---
+
 ### [2026-10-17] — media-mcp: выбор модели у пользователя (elicit + ask-фолбэк)
 
 `generate_image`, `edit_image`, `generate_video`, `synthesize_speech`:

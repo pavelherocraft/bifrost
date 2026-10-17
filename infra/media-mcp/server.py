@@ -37,6 +37,10 @@ LITELLM = "http://127.0.0.1:4001"
 # passthrough — files/retrieve is called directly with the PAYG key.
 MINIMAX_API = "https://api.minimax.io"
 MINIMAX_KEY = os.environ.get("MINIMAX_PAYG_KEY", "")
+# Gemini Omni (Interactions API) — video gen is not OpenAI-compatible, so
+# calls go to Google directly with a server-side key (VK still gates the tool).
+GEMINI_API = "https://generativelanguage.googleapis.com/v1beta"
+GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 PUBLIC_BASE = "https://hcbifrost.herocraft.com"
 FILES_DIR = "/opt/media-mcp/files"
 UPLOADS_DIR = os.path.join(FILES_DIR, "uploads")
@@ -76,7 +80,11 @@ VIDEO_MODELS = {
     "MiniMax-Hailuo-2.3": "v1 flagship, good quality (TokenPlan)",
     "MiniMax-Hailuo-02": "v1 previous generation",
     "T2V-01": "v1 legacy text-to-video",
+    "gemini/omni-1.1-flash": "Google Omni: 3-10s clips with audio, 360p-4K, first/last frame + image/video references, iterative edits via previous_interaction_id",
 }
+OMNI_MODELS = {"gemini/omni-1.1-flash": "gemini-omni-1.1-flash"}
+_OMNI_RESOLUTIONS = {"360p": "360p", "720p": "720p", "768p": "720p",
+                     "1080p": "1080p", "2k": "4k", "4k": "4k"}
 VIDEO_V2_MODELS = {"MiniMax-H3", "MiniMax-H3-Max"}
 VOICE_CLONE_MODELS = {
     "voice/xiaomi/mimo-v2.5-tts-voiceclone": "zero-shot clone: sample passed inline with each request (clone_speech)",
@@ -316,6 +324,92 @@ def _task_cache_put(task_id: str, url: str, size: int) -> None:
         pass
 
 
+def _omni_media_block(raw: bytes) -> dict:
+    """Bytes -> Interactions API input content block (image or video)."""
+    mime = _mime_for(raw)
+    if mime.startswith("image/"):
+        return {"type": "image", "data": base64.b64encode(raw).decode(),
+                "mime_type": mime}
+    if mime.startswith("video/"):
+        return {"type": "video", "data": base64.b64encode(raw).decode(),
+                "mime_type": mime}
+    raise ValueError(f"omni input accepts image/video only — got {mime}")
+
+
+async def _omni_video(model, prompt, resolution, ratio,
+                      first_frame_url, last_frame_url,
+                      reference_media, previous_interaction_id):
+    """Gemini Omni via Interactions API — background execution, poll by id."""
+    if not GEMINI_KEY:
+        raise ValueError("GEMINI_API_KEY not set on media-mcp")
+    # duration_s ignored: Omni auto-picks 3-10s — the API takes no duration param.
+    blocks = []
+    async with httpx.AsyncClient(timeout=180) as c:
+        if first_frame_url:
+            blocks.append(_omni_media_block(
+                await _resolve_source(first_frame_url, c)))
+        for src in (reference_media or []):
+            blocks.append(_omni_media_block(await _resolve_source(src, c)))
+        if last_frame_url:
+            blocks.append(_omni_media_block(
+                await _resolve_source(last_frame_url, c)))
+    blocks.append({"type": "text", "text": prompt})
+    res = _OMNI_RESOLUTIONS.get((resolution or "720p").lower())
+    if not res:
+        raise ValueError(f"omni resolution must be one of "
+                         f"{sorted(set(_OMNI_RESOLUTIONS.values()))} — got {resolution!r}")
+    body = {"model": OMNI_MODELS[model],
+            "input": blocks,
+            "background": True,
+            "response_format": {"type": "video", "resolution": res}}
+    if ratio and ratio != "adaptive":
+        body["response_format"]["aspect_ratio"] = ratio
+    if first_frame_url or last_frame_url:
+        body["generation_config"] = {"video_config": {"task": "image_to_video"}}
+    if previous_interaction_id:
+        body["previous_interaction_id"] = previous_interaction_id
+    async with httpx.AsyncClient(timeout=60) as c:
+        r = await c.post(f"{GEMINI_API}/interactions",
+                         headers={"x-goog-api-key": GEMINI_KEY},
+                         json=body)
+    if r.status_code >= 400:
+        raise ValueError(f"omni {r.status_code}: {r.text[:400]}")
+    d = r.json()
+    tid = d.get("id")
+    if not tid:
+        raise ValueError(f"no interaction id: {d!r}"[:300])
+    return {"task_id": tid, "status": "submitted", "model": model,
+            "note": "omni task — poll video_status(task_id)"}
+
+
+async def _omni_status(task_id: str) -> dict:
+    """Poll a gemini/omni Interactions API job; on completion re-host video."""
+    async with httpx.AsyncClient(timeout=60) as c:
+        r = await c.get(f"{GEMINI_API}/interactions/{task_id}",
+                        headers={"x-goog-api-key": GEMINI_KEY})
+    if r.status_code >= 400:
+        raise ValueError(f"omni {r.status_code}: {r.text[:300]}")
+    d = r.json()
+    status = d.get("status") or "unknown"
+    out = {"task_id": task_id,
+           "status": {"completed": "Success", "failed": "Fail",
+                      "cancelled": "Fail"}.get(status, status)}
+    if status == "completed":
+        for step in d.get("steps") or []:
+            for item in step.get("content") or []:
+                if item.get("type") == "video" and item.get("data"):
+                    vid = base64.b64decode(item["data"])
+                    out["url"] = _save(vid, ".mp4")
+                    out["bytes"] = len(vid)
+                    _task_cache_put(task_id, out["url"], out["bytes"])
+                    return out
+        out["note"] = "completed but no video content in steps"
+    elif status == "failed":
+        out["error"] = (d.get("error") or d.get("status_reason")
+                        or d.get("status_details") or "see raw") 
+    return out
+
+
 # ---------- tools ----------
 
 @mcp.tool()
@@ -334,8 +428,9 @@ def list_media_models() -> dict:
         "mimo_voices": MIMO_VOICES,
         "minimax_voices": MINIMAX_VOICES,
         "audio_formats": ["wav", "mp3"],
-        "video_durations_s": [5, 6, 10],
-        "video_resolutions": ["768P", "1080P", "2K (MiniMax-H3 only)"],
+        "video_durations_s": ["5-10 (MiniMax)", "3-10 auto (omni — not settable)"],
+        "video_resolutions": ["768P", "1080P", "2K (MiniMax-H3 only)",
+                              "omni: 360p/720p/1080p/4k (768P->720p, 2K->4k)"],
         "video_ratios": ["16:9", "4:3", "1:1", "3:4", "9:16", "21:9",
                          "adaptive (i2v only)"],
         "rate_limits": {
@@ -356,6 +451,7 @@ def list_media_models() -> dict:
             "MiniMax-H3 video also supports last_frame_url and reference media (see tool params); H3/H3-Max and voice_clone bill to the MiniMax PAYG account",
             "voicedesign: voice comes purely from `style` description; voice param not supported",
             "leave `model` empty in generate_*/edit_*/synthesize_* to show the user a model picker (or get a choice list back)",
+            "gemini/omni-1.1-flash: generates 3-10s video WITH audio; edit a previous result via previous_interaction_id=<v1_...> (no need to re-upload); reference_media takes images + videos",
         ],
     }
 
@@ -476,16 +572,24 @@ async def generate_video(
     ratio: Annotated[Optional[str], Field(description="Aspect ratio 16:9|4:3|1:1|3:4|9:16|21:9 — REQUIRED for H3 text-to-video; 'adaptive' allowed when a frame image is given")] = None,
     first_frame_url: Annotated[Optional[str], Field(description="Optional image (URL from generate_image/edit_image, upload:<name>, data URI or base64) -> image-to-video first frame; converted to inline data URI server-side (MiniMax can't fetch hosted URLs)")] = None,
     last_frame_url: Annotated[Optional[str], Field(description="H3 only: image for the last frame (first+last frame mode); same source formats as first_frame_url")] = None,
-    reference_media: Annotated[Optional[list[str]], Field(description="H3 only: reference-to-video inputs — list of sources, each http(s) URL | upload:<name> | data-URI | base64. Role auto-detected by magic bytes: image -> reference_image (max 9), video -> reference_video (max 3), audio -> reference_audio (max 3). Mutually exclusive with first_frame_url/last_frame_url (MiniMax API rule)")] = None,
+    reference_media: Annotated[Optional[list[str]], Field(description="Reference-to-video inputs — list of sources, each http(s) URL | upload:<name> | data-URI | base64. MiniMax-H3: image->reference_image (max 9), video->reference_video (max 3), audio->reference_audio (max 3), exclusive with first/last frame. gemini/omni: images + video only (video <=10s for edit/extend)")] = None,
+    previous_interaction_id: Annotated[Optional[str], Field(description="gemini/omni only: id (v1_...) of a previous Omni interaction -> iteratively edit/extend that video without re-uploading it")] = None,
 ) -> dict:
-    """Submit an async video generation job (MiniMax). Returns {task_id} —
+    """Submit an async video generation job. Returns {task_id} —
     generation takes minutes; poll video_status(task_id) until status=Success.
-    H3 models use the v2 multimodal API; others use v1."""
+    MiniMax-H3 uses the v2 multimodal API, other MiniMax use v1;
+    gemini/omni-1.1-flash uses the Google Interactions API."""
     vk = _vk(ctx)
     model = await _resolve_model(ctx, model, VIDEO_MODELS, "video")
     if model is None:
         return _choice_payload("video", VIDEO_MODELS)
+    if previous_interaction_id and model not in OMNI_MODELS:
+        raise ValueError("previous_interaction_id works only with gemini/omni-1.1-flash")
     _check_rate(vk, "video")
+    if model in OMNI_MODELS:
+        return await _omni_video(model, prompt, resolution, ratio,
+                                 first_frame_url, last_frame_url,
+                                 reference_media, previous_interaction_id)
     if reference_media:
         if model not in VIDEO_V2_MODELS:
             raise ValueError("reference_media works only with MiniMax-H3 / H3-Max (v2 API)")
@@ -546,11 +650,14 @@ async def video_status(
     """Poll a video job. Returns {status: Queueing|Processing|Success|Fail};
     on Success also {url} — the video re-hosted locally (provider links expire).
     Works for both v1 and v2 (H3) task_ids — the right API is probed.
+    gemini/omni interaction ids (v1_...) are polled on Google directly.
     Repeated polls after Success return the same URL (no re-download)."""
     vk = _vk(ctx)
     cached = _task_cache_get(task_id)
     if cached:
         return {"task_id": task_id, "status": "Success", **cached}
+    if str(task_id).startswith("v1_"):
+        return await _omni_status(task_id)
     d = None
     for ver in ("v2", "v1"):
         try:
